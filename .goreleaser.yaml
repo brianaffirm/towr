@@ -1,0 +1,32 @@
+version: 2
+
+builds:
+  - main: ./cmd/amux/
+    binary: amux
+    ldflags:
+      - -s -w
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - name_template: "amux_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+
+brews:
+  - repository:
+      owner: brianaffirm
+      name: homebrew-tap
+    directory: Formula
+    homepage: "https://github.com/brianaffirm/amux"
+    description: "Manage parallel AI agent workspaces with git"
+    license: "MIT"
+    test: |
+      assert_match "amux", shell_output("#{bin}/amux --help")
+
+changelog:
+  disable: true

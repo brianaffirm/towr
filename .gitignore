@@ -7,3 +7,4 @@ README.internal.md
 .claude/
 .dev/
 docs/
+.DS_Store
