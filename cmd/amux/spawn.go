@@ -25,7 +25,8 @@ func newSpawnCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Com
 		prFlag      string
 		branchFlag  string
 		agentFlag   string
-		noHooksFlag bool
+		noHooksFlag   bool
+		copyPathsFlag string
 	)
 
 	cmd := &cobra.Command{
@@ -93,12 +94,29 @@ func newSpawnCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Com
 				agent = &workspace.AgentIdentity{Runtime: agentFlag}
 			}
 
+			// Merge copy_paths: config + CLI flag, deduplicated.
+			copyPaths := app.cfg.Workspace.CopyPaths
+			if copyPathsFlag != "" {
+				seen := make(map[string]bool)
+				for _, p := range copyPaths {
+					seen[p] = true
+				}
+				for _, p := range strings.Split(copyPathsFlag, ",") {
+					p = strings.TrimSpace(p)
+					if p != "" && !seen[p] {
+						seen[p] = true
+						copyPaths = append(copyPaths, p)
+					}
+				}
+			}
+
 			opts := workspace.CreateOpts{
 				ID:         wsID,
 				RepoRoot:   app.repoRoot,
 				BaseBranch: baseBranch,
 				Source:     source,
 				Agent:      agent,
+				CopyPaths:  copyPaths,
 			}
 
 			ws, err := app.manager.Create(opts)
@@ -149,6 +167,7 @@ func newSpawnCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Com
 	cmd.Flags().StringVar(&branchFlag, "branch", "", "checkout existing branch")
 	cmd.Flags().StringVar(&agentFlag, "agent", "", "agent runtime to launch")
 	cmd.Flags().BoolVar(&noHooksFlag, "no-hooks", false, "skip post-create hooks")
+	cmd.Flags().StringVar(&copyPathsFlag, "copy-paths", "", "comma-separated paths to copy into worktree (additive with config)")
 
 	return cmd
 }
