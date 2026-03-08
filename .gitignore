@@ -1,0 +1,9 @@
+# Build output
+/amux
+
+# Internal docs and development files
+CLAUDE.md
+README.internal.md
+.claude/
+.dev/
+docs/
