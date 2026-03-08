@@ -29,14 +29,17 @@ Works with Claude Code, Cursor, Aider, or anything that runs in a terminal.
 
 ## Install
 
+### Homebrew (macOS and Linux)
+
 ```bash
-go install github.com/brianho/amux/cmd/amux@latest
+brew tap brianaffirm/tap
+brew install amux
 ```
 
-Or from source:
+### From source
 
 ```bash
-git clone https://github.com/brianho/amux.git
+git clone https://github.com/brianaffirm/amux.git
 cd amux && go install ./cmd/amux/
 ```
 
@@ -84,11 +87,14 @@ Run `amux` with no arguments for an interactive dashboard:
 | `amux ls` | List workspaces |
 | `amux land <id>` | Validate, merge, clean up |
 | `amux land <id> --pr` | Push + print PR URL |
+| `amux land <id> --squash` | Squash commits before merge |
+| `amux land <id> --dry-run` | Preview merge without executing |
 | `amux diff <id>` | Show changes |
 | `amux open <id>` | Switch to workspace tmux session |
 | `amux preview --diff` | Show diff in tmux split pane |
 | `amux cleanup <id>` | Remove workspace |
 | `amux doctor` | Diagnose problems |
+| `amux queue` | Show pending approval items |
 
 All commands support `--json` for scripting.
 
@@ -105,7 +111,27 @@ post_create = "cd ${WORKTREE_PATH} && npm install"
 pre_land = "cd ${WORKTREE_PATH} && npm test"
 ```
 
-Pre-land hooks block the merge if they fail.
+Pre-land hooks block the merge if they fail. Available variables: `${WORKSPACE_ID}`, `${WORKTREE_PATH}`, `${BRANCH}`, `${BASE_BRANCH}`, `${REPO_ROOT}`.
+
+## How it works
+
+State lives in `~/.amux/`, not in your repo. No files to gitignore, no risk of committing logs.
+
+```
+~/.amux/
+  repos/<hash>/
+    state.db        SQLite — workspace records + events
+    audit.jsonl     Append-only audit trail
+    config.toml     Per-repo config
+  worktrees/<repo>/
+    auth/           Git worktree for "auth" workspace
+    billing/        Git worktree for "billing" workspace
+```
+
+## Requirements
+
+- **git** 2.15+ (for `git worktree` support)
+- **tmux** (optional) — enables `amux open`, `amux preview`, and TUI session switching. Without tmux, `open` prints the worktree path and `preview` is unavailable.
 
 ## License
 
