@@ -14,9 +14,15 @@ type Config struct {
 	Cleanup       CleanupConfig                 `toml:"cleanup"`
 	Hooks         HooksConfig                   `toml:"hooks"`
 	Landing       LandingConfig                 `toml:"landing"`
+	Workspace     WorkspaceConfig               `toml:"workspace"`
 	Agents        map[string]AgentConfig        `toml:"agents"`
 	Notifications map[string]NotificationConfig `toml:"notifications"`
 	Timeouts      TimeoutsConfig                `toml:"timeouts"`
+}
+
+// WorkspaceConfig holds workspace creation settings.
+type WorkspaceConfig struct {
+	CopyPaths []string `toml:"copy_paths"`
 }
 
 // DefaultsConfig holds default workspace settings.

@@ -179,6 +179,28 @@ protected_branches = ["main", "staging"]
 	}
 }
 
+func TestLoadFile_WorkspaceCopyPaths(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `
+[workspace]
+copy_paths = ["CLAUDE.md", "AGENTS.md", ".coflow/"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Workspace.CopyPaths) != 3 {
+		t.Fatalf("CopyPaths = %v, want 3 entries", cfg.Workspace.CopyPaths)
+	}
+	if cfg.Workspace.CopyPaths[2] != ".coflow/" {
+		t.Errorf("CopyPaths[2] = %q, want .coflow/", cfg.Workspace.CopyPaths[2])
+	}
+}
+
 func TestIsProtectedBranch(t *testing.T) {
 	cfg := DefaultConfig()
 	tests := []struct {
