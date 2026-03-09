@@ -106,6 +106,7 @@ type CreateOpts struct {
 	Source     SpawnSource     // How the workspace was spawned
 	Agent      *AgentIdentity  // Optional agent identity
 	CopyPaths  []string        // Paths to copy from repo root into worktree
+	LinkPaths  []string        // Paths to symlink from repo root into worktree
 }
 
 // ListFilter specifies criteria for listing workspaces.

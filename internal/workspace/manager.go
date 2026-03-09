@@ -98,9 +98,22 @@ func (m *Manager) Create(opts CreateOpts) (*Workspace, error) {
 		return nil, fmt.Errorf("failed to create worktree: %w", err)
 	}
 
+	// Validate no overlap between copy_paths and link_paths.
+	if overlap := pathOverlap(opts.CopyPaths, opts.LinkPaths); len(overlap) > 0 {
+		_ = RemoveWorktree(opts.RepoRoot, worktreePath)
+		_ = DeleteBranch(opts.RepoRoot, branch)
+		_ = m.store.Delete(opts.ID)
+		return nil, fmt.Errorf("paths appear in both copy_paths and link_paths: %v", overlap)
+	}
+
 	// Copy configured paths into the worktree.
 	if len(opts.CopyPaths) > 0 {
 		CopyPaths(opts.RepoRoot, worktreePath, opts.CopyPaths)
+	}
+
+	// Symlink configured paths into the worktree.
+	if len(opts.LinkPaths) > 0 {
+		LinkPaths(opts.RepoRoot, worktreePath, opts.LinkPaths)
 	}
 
 	// Mark ready.

@@ -247,6 +247,71 @@ copy_paths = ["AGENTS.md", "CLAUDE.md"]
 	}
 }
 
+func TestLoadFile_WorkspaceLinkPaths(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `
+[workspace]
+link_paths = [".coflow/", ".secrets/"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Workspace.LinkPaths) != 2 {
+		t.Fatalf("LinkPaths = %v, want 2 entries", cfg.Workspace.LinkPaths)
+	}
+	if cfg.Workspace.LinkPaths[0] != ".coflow/" {
+		t.Errorf("LinkPaths[0] = %q, want .coflow/", cfg.Workspace.LinkPaths[0])
+	}
+}
+
+func TestLoadRepo_MergesWorkspaceLinkPaths(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("AMUX_HOME", tmp)
+
+	globalPath := filepath.Join(tmp, "global-config.toml")
+	globalContent := `
+[workspace]
+link_paths = [".coflow/"]
+`
+	if err := os.WriteFile(globalPath, []byte(globalContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	repoRoot := "/my/repo"
+	repoDir := filepath.Join(tmp, "repos", RepoHash(repoRoot))
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	repoContent := `
+[workspace]
+link_paths = [".coflow/", ".secrets/"]
+`
+	if err := os.WriteFile(filepath.Join(repoDir, "config.toml"), []byte(repoContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadRepo(repoRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should merge and deduplicate: .coflow/, .secrets/ (2 unique)
+	if len(cfg.Workspace.LinkPaths) != 2 {
+		t.Fatalf("LinkPaths = %v, want 2 entries (merged+deduped)", cfg.Workspace.LinkPaths)
+	}
+	expected := []string{".coflow/", ".secrets/"}
+	for i, want := range expected {
+		if cfg.Workspace.LinkPaths[i] != want {
+			t.Errorf("LinkPaths[%d] = %q, want %q", i, cfg.Workspace.LinkPaths[i], want)
+		}
+	}
+}
+
 func TestIsProtectedBranch(t *testing.T) {
 	cfg := DefaultConfig()
 	tests := []struct {

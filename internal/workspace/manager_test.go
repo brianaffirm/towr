@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -88,6 +89,29 @@ func TestManager_Create_Validation(t *testing.T) {
 				t.Error("expected validation error")
 			}
 		})
+	}
+}
+
+func TestManager_Create_RejectsOverlappingPaths(t *testing.T) {
+	repo := initTestRepo(t)
+	t.Setenv("AMUX_HOME", t.TempDir())
+
+	store := NewMemoryStore()
+	mgr := NewManager(store)
+
+	_, err := mgr.Create(CreateOpts{
+		ID:         "overlap-test",
+		RepoRoot:   repo,
+		BaseBranch: "main",
+		Source:     SpawnSource{Kind: SpawnFromTask, Value: "test"},
+		CopyPaths:  []string{"CLAUDE.md", ".coflow/"},
+		LinkPaths:  []string{".coflow"},
+	})
+	if err == nil {
+		t.Fatal("expected error for overlapping copy_paths and link_paths")
+	}
+	if got := err.Error(); !strings.Contains(got, "copy_paths") || !strings.Contains(got, "link_paths") {
+		t.Errorf("error = %q, want mention of copy_paths and link_paths", got)
 	}
 }
 

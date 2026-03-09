@@ -23,6 +23,7 @@ type Config struct {
 // WorkspaceConfig holds workspace creation settings.
 type WorkspaceConfig struct {
 	CopyPaths []string `toml:"copy_paths"`
+	LinkPaths []string `toml:"link_paths"`
 }
 
 // DefaultsConfig holds default workspace settings.
@@ -212,6 +213,24 @@ func merge(base, repo *Config) *Config {
 			}
 		}
 		result.Workspace.CopyPaths = merged
+	}
+
+	if len(repo.Workspace.LinkPaths) > 0 {
+		seen := make(map[string]bool)
+		var merged []string
+		for _, p := range base.Workspace.LinkPaths {
+			if !seen[p] {
+				seen[p] = true
+				merged = append(merged, p)
+			}
+		}
+		for _, p := range repo.Workspace.LinkPaths {
+			if !seen[p] {
+				seen[p] = true
+				merged = append(merged, p)
+			}
+		}
+		result.Workspace.LinkPaths = merged
 	}
 
 	return &result
