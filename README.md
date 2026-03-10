@@ -66,6 +66,7 @@ cd ~/my-project
 amux spawn "add authentication" --id auth
 amux spawn "fix payment flow" --id payments
 amux spawn                       # quick: auto-generates ws-0001
+amux spawn "fix billing" --env SUBPROJECT=services/billing  # monolith
 
 # Already working on a branch? Adopt it
 amux adopt                       # adopt current branch
@@ -152,7 +153,7 @@ Run `amux` with no arguments for an interactive dashboard:
 
 | Command | Description |
 |---------|-------------|
-| `amux spawn [task]` | Create workspace (branch + worktree). No args = auto-ID |
+| `amux spawn [task] [--env K=V]` | Create workspace (branch + worktree). No args = auto-ID |
 | `amux adopt [path-or-branch]` | Adopt existing worktree/branch as amux workspace |
 | `amux ls` | List workspaces with diff stats and tree status |
 | `amux land <id>` | Validate, rebase, merge, clean up |
@@ -170,6 +171,7 @@ Run `amux` with no arguments for an interactive dashboard:
 | `amux doctor` | Diagnose orphaned worktrees, missing branches |
 | `amux queue` | Show pending approval items |
 | `amux approve/deny/respond <id>` | Resolve approval items |
+| `amux overlap` | Detect file overlaps between workspaces (merge conflict risk) |
 | `amux shell-hook` | Print shell integration for prompt nudges |
 
 All commands support `--json` for scripting.
