@@ -27,6 +27,14 @@ const (
 	EventCleanupForced          = "workspace.cleanup.forced"
 	EventWorkspaceAdopted       = "workspace.adopted"
 	EventWorkspaceAutoTransition = "workspace.auto_transition"
+
+	// Dispatch orchestration events
+	EventTaskDispatched = "task.dispatched"
+	EventTaskStarted    = "task.started"
+	EventTaskCompleted  = "task.completed"
+	EventTaskFailed     = "task.failed"
+	EventTaskBlocked    = "task.blocked"
+	EventTaskPromoted   = "task.promoted"
 )
 
 // Event represents an immutable state-change record.
