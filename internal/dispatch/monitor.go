@@ -12,23 +12,81 @@ const (
 )
 
 // DetectPaneState analyzes tmux capture-pane output to determine Claude's state.
-// It looks for the ❯ (U+276F) character on the last non-empty line.
+// It scans the last ~15 non-empty lines for Claude's input prompt ❯ (U+276F).
+// We check multiple lines because Claude's UI has a status bar and horizontal rules
+// below the prompt (e.g., "? for shortcuts", "────────").
+//
+// Permission dialogs also contain ❯ (for menu items) so we first check for
+// dialog indicators and return PaneWorking if a dialog is active.
 func DetectPaneState(capturedOutput string) PaneState {
 	lines := strings.Split(strings.TrimRight(capturedOutput, "\n"), "\n")
 
-	// Walk backwards to find last non-empty line
-	for i := len(lines) - 1; i >= 0; i-- {
+	// First pass: check if a permission dialog is active in the last 15 lines.
+	// Dialog indicators: "Esc to cancel", "Do you want to", "Tab to amend".
+	checked := 0
+	hasContent := false
+	for i := len(lines) - 1; i >= 0 && checked < 15; i-- {
 		line := strings.TrimSpace(lines[i])
 		if line == "" {
 			continue
 		}
-		// ❯ is U+276F
-		if strings.Contains(line, "❯") {
+		checked++
+		hasContent = true
+		if isDialogIndicator(line) {
+			return PaneWorking
+		}
+	}
+
+	if !hasContent {
+		return PaneEmpty
+	}
+
+	// Second pass: look for idle prompt.
+	checked = 0
+	for i := len(lines) - 1; i >= 0 && checked < 15; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		checked++
+		if isIdlePrompt(line) {
 			return PaneIdle
 		}
-		return PaneWorking
 	}
-	return PaneEmpty
+	return PaneWorking
+}
+
+// isDialogIndicator checks if a line indicates an active permission/confirmation dialog.
+func isDialogIndicator(line string) bool {
+	return strings.Contains(line, "Esc to cancel") ||
+		strings.Contains(line, "Do you want to") ||
+		strings.Contains(line, "Tab to amend") ||
+		strings.Contains(line, "Enter to confirm")
+}
+
+// isIdlePrompt checks if a line is Claude's idle input prompt.
+// The idle prompt is ❯ optionally followed by suggestion text (e.g., "❯ Try something").
+// Selection menu items like "❯ 1. Yes, I trust this folder" are NOT idle prompts.
+func isIdlePrompt(line string) bool {
+	// Must contain ❯
+	idx := strings.Index(line, "❯")
+	if idx < 0 {
+		return false
+	}
+	// Check what follows ❯
+	rest := strings.TrimSpace(line[idx+len("❯"):])
+	if rest == "" {
+		return true // bare ❯ prompt
+	}
+	// If followed by a digit, it's a menu item (e.g., "1. Yes, I trust this folder")
+	if len(rest) > 0 && rest[0] >= '0' && rest[0] <= '9' {
+		return false
+	}
+	// If the line also contains "Enter to confirm" or "Esc to cancel", it's a dialog
+	if strings.Contains(line, "Enter to confirm") || strings.Contains(line, "Esc to cancel") {
+		return false
+	}
+	return true
 }
 
 // ExtractLastResponse extracts text between the last two ❯ prompts,
@@ -39,7 +97,7 @@ func ExtractLastResponse(capturedOutput string) string {
 	// Find the last ❯ (current prompt) and second-to-last ❯ (previous prompt)
 	var promptIndices []int
 	for i, line := range lines {
-		if strings.Contains(line, "❯") {
+		if isIdlePrompt(strings.TrimSpace(line)) {
 			promptIndices = append(promptIndices, i)
 		}
 	}

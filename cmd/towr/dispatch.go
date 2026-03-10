@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/brianaffirm/towr/internal/cli"
@@ -207,14 +208,23 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 			return fmt.Errorf("launch claude: %w", err)
 		}
 
-		// Wait for Claude to start (poll for ❯ appearing).
+		// Wait for Claude to start. Handle trust/permission dialogs.
 		started := false
-		for i := 0; i < 20; i++ { // up to ~30 seconds
+		dialogHandled := false
+		for i := 0; i < 40; i++ { // up to ~60 seconds
 			time.Sleep(1500 * time.Millisecond)
 			captured, err = app.term.CapturePane(wsID, 50)
 			if err != nil {
 				continue
 			}
+
+			// Handle the workspace trust dialog: "Yes, I trust this folder" is option 1 (default).
+			if !dialogHandled && strings.Contains(captured, "Yes, I trust this folder") {
+				_ = app.term.SendKeys(wsID, "Enter")
+				dialogHandled = true
+				continue
+			}
+
 			if dispatch.DetectPaneState(captured) == dispatch.PaneIdle {
 				started = true
 				break

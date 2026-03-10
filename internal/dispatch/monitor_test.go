@@ -18,6 +18,10 @@ func TestDetectPaneState(t *testing.T) {
 		{"prompt with suggestion", "❯ Try something\n", PaneIdle},
 		{"completely empty", "", PaneEmpty},
 		{"working with trailing blanks", "Processing files...\n\n\n", PaneWorking},
+		{"trust dialog is not idle", " ❯ 1. Yes, I trust this folder\n   2. No, exit\n\n Enter to confirm · Esc to cancel\n", PaneWorking},
+		{"menu selection not idle", "❯ 1. Allow once\n", PaneWorking},
+		{"real claude UI with status bar", "────────\n❯ \n────────\n  ? for shortcuts              Update available!\n\n\n\n", PaneIdle},
+		{"permission dialog active", "❯ Create a file\n\n Write(hello.txt)\n Do you want to create hello.txt?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel · Tab to amend\n", PaneWorking},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
