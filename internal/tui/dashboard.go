@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brianaffirm/towr/internal/config"
 	"github.com/brianaffirm/towr/internal/git"
 	"github.com/brianaffirm/towr/internal/store"
 	"github.com/brianaffirm/towr/internal/workspace"
@@ -178,12 +179,56 @@ func loadAllWorkspaces(reposDir string) ([]WorkspaceRow, error) {
 		return nil, err
 	}
 
+	// Reconcile in all-repos mode too.
+	staleThreshold := 7 * 24 * time.Hour
+	for _, ws := range workspaces {
+		result := workspace.ReconcileWorkspace(ws, staleThreshold)
+		if result != nil {
+			ws.Status = string(result.To)
+			// Best-effort persist: open the workspace's store, save, close.
+			if dbPath := reconcileDBPath(reposDir, ws); dbPath != "" {
+				if rs := openAndSave(dbPath, ws, result); rs != nil {
+					_ = rs
+				}
+			}
+		}
+	}
+
 	var rows []WorkspaceRow
 	for _, ws := range workspaces {
 		// Health not available in all-repos mode (no single store to query).
 		rows = append(rows, buildWorkspaceRow(ws, ""))
 	}
 	return rows, nil
+}
+
+// reconcileDBPath finds the state.db path for a workspace in all-repos mode.
+func reconcileDBPath(reposDir string, ws *store.Workspace) string {
+	if ws.RepoRoot != "" {
+		return filepath.Join(config.RepoStatePath(ws.RepoRoot), "state.db")
+	}
+	return filepath.Join(filepath.Dir(reposDir), "global-state.db")
+}
+
+// openAndSave persists a reconciliation result to the workspace's store.
+func openAndSave(dbPath string, ws *store.Workspace, result *workspace.ReconcileResult) error {
+	s := store.NewSQLiteStore()
+	if err := s.Init(dbPath); err != nil {
+		return err
+	}
+	defer s.Close()
+	_ = s.SaveWorkspace(ws)
+	_ = s.EmitEvent(store.Event{
+		Kind:        store.EventWorkspaceAutoTransition,
+		WorkspaceID: ws.ID,
+		RepoRoot:    ws.RepoRoot,
+		Data: map[string]interface{}{
+			"from":   string(result.From),
+			"to":     string(result.To),
+			"reason": result.Reason,
+		},
+	})
+	return nil
 }
 
 func buildWorkspaceRow(ws *store.Workspace, health string) WorkspaceRow {

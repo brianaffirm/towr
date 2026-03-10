@@ -40,6 +40,15 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 					return err
 				}
 				showRepoColumn = true
+
+				// Reconcile in all-repos mode.
+				staleThreshold := 7 * 24 * time.Hour
+				for _, ws := range workspaces {
+					result := workspace.ReconcileWorkspace(ws, staleThreshold)
+					if result != nil {
+						ws.Status = string(result.To)
+					}
+				}
 			} else {
 				// Inside repo: show only this repo's workspaces
 				var err error
