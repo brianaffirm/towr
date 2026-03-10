@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brianho/amux/internal/git"
-	"github.com/brianho/amux/internal/store"
-	"github.com/brianho/amux/internal/workspace"
+	"github.com/brianaffirm/towr/internal/git"
+	"github.com/brianaffirm/towr/internal/store"
+	"github.com/brianaffirm/towr/internal/workspace"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -472,7 +472,7 @@ func (m DashboardModel) handleDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// landWorkspace runs `amux land` for the workspace via a subprocess.
+// landWorkspace runs `towr land` for the workspace via a subprocess.
 func (m DashboardModel) handleConfirmCleanupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y":
@@ -540,7 +540,7 @@ func cleanupSafetyCheck(ws WorkspaceRow) (warnings []string, safe bool) {
 	return warnings, safe
 }
 
-// doCleanup runs `amux cleanup --force <id>` as a subprocess.
+// doCleanup runs `towr cleanup --force <id>` as a subprocess.
 func doCleanup(ws WorkspaceRow) tea.Cmd {
 	return tea.ExecProcess(exec.Command(os.Args[0], "cleanup", "--force", ws.ID), func(err error) tea.Msg {
 		return tickMsg(time.Now())
@@ -566,14 +566,14 @@ func openEditor(ws WorkspaceRow) tea.Cmd {
 	})
 }
 
-// showDiff shows the diff for the selected workspace using amux diff --full.
+// showDiff shows the diff for the selected workspace using towr diff --full.
 func showDiff(ws WorkspaceRow) tea.Cmd {
 	return tea.ExecProcess(exec.Command(os.Args[0], "diff", "--full", ws.ID), func(err error) tea.Msg {
 		return tickMsg(time.Now())
 	})
 }
 
-// switchToWorkspace quits the TUI and runs `amux open` to switch tmux session.
+// switchToWorkspace quits the TUI and runs `towr open` to switch tmux session.
 func switchToWorkspace(ws WorkspaceRow) tea.Cmd {
 	return tea.ExecProcess(exec.Command(os.Args[0], "open", ws.ID), func(err error) tea.Msg {
 		// After switching, quit the TUI — user is now in the workspace session.
@@ -655,7 +655,7 @@ func (m DashboardModel) renderDashboard() string {
 	if m.allRepos {
 		repoName = "all repos"
 	}
-	title := fmt.Sprintf(" amux ── %s ── %d workspaces ", repoName, len(m.workspaces))
+	title := fmt.Sprintf(" towr ── %s ── %d workspaces ", repoName, len(m.workspaces))
 	b.WriteString(headerStyle.Render(title))
 	b.WriteString("\n\n")
 

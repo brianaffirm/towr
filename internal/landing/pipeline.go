@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/brianho/amux/internal/git"
+	"github.com/brianaffirm/towr/internal/git"
 )
 
 // MergeStrategy defines how a workspace branch is merged into the base branch.

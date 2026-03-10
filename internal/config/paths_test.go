@@ -6,24 +6,24 @@ import (
 	"testing"
 )
 
-func TestAmuxHome_Default(t *testing.T) {
-	os.Unsetenv("AMUX_HOME")
+func TestTowrHome_Default(t *testing.T) {
+	os.Unsetenv("TOWR_HOME")
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := AmuxHome()
-	want := filepath.Join(home, ".amux")
+	got := TowrHome()
+	want := filepath.Join(home, ".towr")
 	if got != want {
-		t.Errorf("AmuxHome() = %q, want %q", got, want)
+		t.Errorf("TowrHome() = %q, want %q", got, want)
 	}
 }
 
-func TestAmuxHome_EnvOverride(t *testing.T) {
-	t.Setenv("AMUX_HOME", "/tmp/test-amux")
-	got := AmuxHome()
-	if got != "/tmp/test-amux" {
-		t.Errorf("AmuxHome() = %q, want /tmp/test-amux", got)
+func TestTowrHome_EnvOverride(t *testing.T) {
+	t.Setenv("TOWR_HOME", "/tmp/test-towr")
+	got := TowrHome()
+	if got != "/tmp/test-towr" {
+		t.Errorf("TowrHome() = %q, want /tmp/test-towr", got)
 	}
 }
 
@@ -47,26 +47,26 @@ func TestRepoHash_DifferentPaths(t *testing.T) {
 }
 
 func TestRepoStatePath(t *testing.T) {
-	t.Setenv("AMUX_HOME", "/tmp/test-amux")
+	t.Setenv("TOWR_HOME", "/tmp/test-towr")
 	got := RepoStatePath("/my/repo")
-	want := filepath.Join("/tmp/test-amux", "repos", RepoHash("/my/repo"))
+	want := filepath.Join("/tmp/test-towr", "repos", RepoHash("/my/repo"))
 	if got != want {
 		t.Errorf("RepoStatePath() = %q, want %q", got, want)
 	}
 }
 
 func TestWorktreeRoot(t *testing.T) {
-	t.Setenv("AMUX_HOME", "/tmp/test-amux")
+	t.Setenv("TOWR_HOME", "/tmp/test-towr")
 	got := WorktreeRoot()
-	if got != "/tmp/test-amux/worktrees" {
-		t.Errorf("WorktreeRoot() = %q, want /tmp/test-amux/worktrees", got)
+	if got != "/tmp/test-towr/worktrees" {
+		t.Errorf("WorktreeRoot() = %q, want /tmp/test-towr/worktrees", got)
 	}
 }
 
-func TestEnsureAmuxDirs(t *testing.T) {
+func TestEnsureTowrDirs(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("AMUX_HOME", tmp)
-	if err := EnsureAmuxDirs(); err != nil {
+	t.Setenv("TOWR_HOME", tmp)
+	if err := EnsureTowrDirs(); err != nil {
 		t.Fatal(err)
 	}
 	for _, sub := range []string{"repos", "worktrees"} {
@@ -78,18 +78,18 @@ func TestEnsureAmuxDirs(t *testing.T) {
 }
 
 func TestGlobalConfigPath(t *testing.T) {
-	t.Setenv("AMUX_HOME", "/tmp/test-amux")
+	t.Setenv("TOWR_HOME", "/tmp/test-towr")
 	got := GlobalConfigPath()
-	if got != "/tmp/test-amux/global-config.toml" {
+	if got != "/tmp/test-towr/global-config.toml" {
 		t.Errorf("GlobalConfigPath() = %q", got)
 	}
 }
 
 func TestRepoConfigPath(t *testing.T) {
-	t.Setenv("AMUX_HOME", "/tmp/test-amux")
+	t.Setenv("TOWR_HOME", "/tmp/test-towr")
 	got := RepoConfigPath("/my/repo")
 	hash := RepoHash("/my/repo")
-	want := filepath.Join("/tmp/test-amux", "repos", hash, "config.toml")
+	want := filepath.Join("/tmp/test-towr", "repos", hash, "config.toml")
 	if got != want {
 		t.Errorf("RepoConfigPath() = %q, want %q", got, want)
 	}

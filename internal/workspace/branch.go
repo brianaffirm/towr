@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-// BranchName returns the amux-namespaced branch name for a workspace ID.
+// BranchName returns the towr-namespaced branch name for a workspace ID.
 func BranchName(workspaceID string) string {
-	return "amux/" + workspaceID
+	return "towr/" + workspaceID
 }
 
 // CreateBranch creates a new branch at the given base ref in the repository.

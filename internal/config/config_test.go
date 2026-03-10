@@ -79,7 +79,7 @@ func TestLoadFile_Invalid(t *testing.T) {
 }
 
 func TestLoadGlobal_NoFile(t *testing.T) {
-	t.Setenv("AMUX_HOME", t.TempDir())
+	t.Setenv("TOWR_HOME", t.TempDir())
 	cfg, err := LoadGlobal()
 	if err != nil {
 		t.Fatal(err)
@@ -91,7 +91,7 @@ func TestLoadGlobal_NoFile(t *testing.T) {
 
 func TestLoadRepo_MergesConfig(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("AMUX_HOME", tmp)
+	t.Setenv("TOWR_HOME", tmp)
 
 	// Write global config.
 	globalPath := filepath.Join(tmp, "global-config.toml")
@@ -157,7 +157,7 @@ func TestDefaultConfig_ProtectedBranches(t *testing.T) {
 
 func TestLoadRepo_MergesLandingConfig(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("AMUX_HOME", tmp)
+	t.Setenv("TOWR_HOME", tmp)
 	repoRoot := "/my/repo"
 	repoDir := filepath.Join(tmp, "repos", RepoHash(repoRoot))
 	if err := os.MkdirAll(repoDir, 0o755); err != nil {
@@ -203,7 +203,7 @@ copy_paths = ["CLAUDE.md", "AGENTS.md", ".coflow/"]
 
 func TestLoadRepo_MergesWorkspaceCopyPaths(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("AMUX_HOME", tmp)
+	t.Setenv("TOWR_HOME", tmp)
 
 	// Global config with some paths.
 	globalPath := filepath.Join(tmp, "global-config.toml")
@@ -271,7 +271,7 @@ link_paths = [".coflow/", ".secrets/"]
 
 func TestLoadRepo_MergesWorkspaceLinkPaths(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("AMUX_HOME", tmp)
+	t.Setenv("TOWR_HOME", tmp)
 
 	globalPath := filepath.Join(tmp, "global-config.toml")
 	globalContent := `
@@ -323,7 +323,7 @@ func TestIsProtectedBranch(t *testing.T) {
 		{"develop", true},
 		{"release/1.0", true},
 		{"release/2.3.4", true},
-		{"amux/auth", false},
+		{"towr/auth", false},
 		{"feature/foo", false},
 		{"main-backup", false},
 	}

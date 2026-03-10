@@ -21,18 +21,18 @@ func cleanupSession(t *testing.T, name string) {
 }
 
 func TestSessionName(t *testing.T) {
-	b := NewTmuxBackend("amux")
+	b := NewTmuxBackend("towr")
 	got := b.sessionName("my-workspace")
-	want := "amux/my-workspace"
+	want := "towr/my-workspace"
 	if got != want {
 		t.Errorf("sessionName = %q, want %q", got, want)
 	}
 }
 
 func TestSessionNameWithRepoPrefix(t *testing.T) {
-	b := NewTmuxBackend("amux/myrepo")
+	b := NewTmuxBackend("towr/myrepo")
 	got := b.sessionName("feat")
-	want := "amux/myrepo/feat"
+	want := "towr/myrepo/feat"
 	if got != want {
 		t.Errorf("sessionName = %q, want %q", got, want)
 	}
@@ -41,7 +41,7 @@ func TestSessionNameWithRepoPrefix(t *testing.T) {
 func TestCreatePaneCreatesSession(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("amux-test")
+	b := NewTmuxBackend("towr-test")
 	sessionName := b.sessionName("ws1")
 	t.Cleanup(func() { cleanupSession(t, sessionName) })
 
@@ -59,7 +59,7 @@ func TestCreatePaneCreatesSession(t *testing.T) {
 func TestCreatePaneCreatesTwoWindows(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("amux-test-windows")
+	b := NewTmuxBackend("towr-test-windows")
 	sessionName := b.sessionName("ws1")
 	t.Cleanup(func() { cleanupSession(t, sessionName) })
 
@@ -102,7 +102,7 @@ func TestCreatePaneCreatesTwoWindows(t *testing.T) {
 func TestTwoWorkspacesGetSeparateSessions(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("amux-test-separate")
+	b := NewTmuxBackend("towr-test-separate")
 	session1 := b.sessionName("ws1")
 	session2 := b.sessionName("ws2")
 	t.Cleanup(func() {
@@ -134,7 +134,7 @@ func TestTwoWorkspacesGetSeparateSessions(t *testing.T) {
 func TestDestroyPaneKillsSession(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("amux-test-destroy")
+	b := NewTmuxBackend("towr-test-destroy")
 	sessionName := b.sessionName("ws1")
 	t.Cleanup(func() { cleanupSession(t, sessionName) })
 
@@ -158,7 +158,7 @@ func TestDestroyPaneKillsSession(t *testing.T) {
 func TestListPanesListsSessions(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("amux-test-list")
+	b := NewTmuxBackend("towr-test-list")
 	session1 := b.sessionName("ws-a")
 	session2 := b.sessionName("ws-b")
 	t.Cleanup(func() {
@@ -195,7 +195,7 @@ func TestListPanesListsSessions(t *testing.T) {
 func TestIsPaneAliveChecksSession(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("amux-test-alive")
+	b := NewTmuxBackend("towr-test-alive")
 	sessionName := b.sessionName("ws1")
 	t.Cleanup(func() { cleanupSession(t, sessionName) })
 
@@ -225,7 +225,7 @@ func TestIsPaneAliveChecksSession(t *testing.T) {
 func TestSendKeysTargetsSession(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("amux-test-keys")
+	b := NewTmuxBackend("towr-test-keys")
 	sessionName := b.sessionName("ws1")
 	t.Cleanup(func() { cleanupSession(t, sessionName) })
 
@@ -243,7 +243,7 @@ func TestAttachInsideTmuxUsesSwitchClient(t *testing.T) {
 	// This test verifies the method signature works, but can't fully test
 	// tmux switch-client without being inside a tmux session.
 	// We just verify the session name format is correct.
-	b := NewTmuxBackend("amux")
+	b := NewTmuxBackend("towr")
 	name := b.sessionName("my-ws")
 	if !strings.Contains(name, "/") {
 		t.Errorf("session name %q should use / separator for tmux sessions", name)

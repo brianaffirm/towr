@@ -16,7 +16,7 @@ func TestCopyPaths_Files(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	branch := "amux/copy-paths-test"
+	branch := "towr/copy-paths-test"
 	if err := CreateBranch(repo, branch, "main"); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestCopyPaths_Directory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	branch := "amux/copy-dir-test"
+	branch := "towr/copy-dir-test"
 	if err := CreateBranch(repo, branch, "main"); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestCopyPaths_SkipsExisting(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	branch := "amux/skip-existing"
+	branch := "towr/skip-existing"
 	if err := CreateBranch(repo, branch, "main"); err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestCopyPaths_SkipsExisting(t *testing.T) {
 func TestCopyPaths_MissingSrcSkipped(t *testing.T) {
 	repo := initTestRepoWithFile(t)
 
-	branch := "amux/missing-src"
+	branch := "towr/missing-src"
 	if err := CreateBranch(repo, branch, "main"); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestCopyPaths_MissingSrcSkipped(t *testing.T) {
 func TestCopyPaths_EmptyList(t *testing.T) {
 	repo := initTestRepoWithFile(t)
 
-	branch := "amux/empty-paths"
+	branch := "towr/empty-paths"
 	if err := CreateBranch(repo, branch, "main"); err != nil {
 		t.Fatal(err)
 	}

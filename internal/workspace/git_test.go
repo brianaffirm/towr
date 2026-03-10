@@ -33,7 +33,7 @@ func initTestRepo(t *testing.T) string {
 func TestCreateAndDeleteBranch(t *testing.T) {
 	repo := initTestRepo(t)
 
-	branch := "amux/test-branch"
+	branch := "towr/test-branch"
 	if err := CreateBranch(repo, branch, "main"); err != nil {
 		t.Fatalf("CreateBranch: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestGetHeadRef(t *testing.T) {
 func TestCreateAndRemoveWorktree(t *testing.T) {
 	repo := initTestRepo(t)
 
-	branch := "amux/wt-test"
+	branch := "towr/wt-test"
 	if err := CreateBranch(repo, branch, "main"); err != nil {
 		t.Fatal(err)
 	}

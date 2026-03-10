@@ -5,9 +5,5 @@
 # OS files
 .DS_Store
 
-# coflow — private project state
-.coflow/
+# Agent instructions — generated, not checked in
 CLAUDE.md
-.cursorrules
-AGENTS.md
-.clinerules

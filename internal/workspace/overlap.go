@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/brianho/amux/internal/git"
-	"github.com/brianho/amux/internal/store"
+	"github.com/brianaffirm/towr/internal/git"
+	"github.com/brianaffirm/towr/internal/store"
 )
 
 // OverlapPair describes two workspaces editing the same files.

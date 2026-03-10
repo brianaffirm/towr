@@ -162,7 +162,7 @@ func TestSaveGetWorkspace(t *testing.T) {
 		ID:         "auth",
 		RepoRoot:   "/repo",
 		BaseBranch: "main",
-		Branch:     "amux/auth",
+		Branch:     "towr/auth",
 		Status:     "READY",
 		ExitCode:   &exitCode,
 		Checkpoint: json.RawMessage(`{"progress":"50%"}`),

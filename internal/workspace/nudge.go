@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brianho/amux/internal/git"
+	"github.com/brianaffirm/towr/internal/git"
 )
 
 // NudgeResult describes whether the user should be nudged to adopt.
@@ -19,7 +19,7 @@ type NudgeResult struct {
 }
 
 // CheckNudge determines if the current directory has untracked work that
-// should be adopted into amux. Designed to run on every shell prompt (<50ms).
+// should be adopted into towr. Designed to run on every shell prompt (<50ms).
 func CheckNudge(cwd string) NudgeResult {
 	// 1. Is this a git repo?
 	repoRoot, err := git.GetRepoRoot(cwd)
@@ -70,7 +70,7 @@ func CheckNudge(cwd string) NudgeResult {
 	return NudgeResult{
 		ShouldNudge: true,
 		Branch:      branch,
-		Message:     fmt.Sprintf("amux: untracked work on %s — 'amux adopt' to track", branch),
+		Message:     fmt.Sprintf("towr: untracked work on %s — 'towr adopt' to track", branch),
 	}
 }
 
@@ -85,7 +85,7 @@ func isDefaultBranch(branch string) bool {
 // nudgeCachePath returns the path to the nudge rate-limit cache.
 func nudgeCachePath() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".amux", "nudge-cache")
+	return filepath.Join(home, ".towr", "nudge-cache")
 }
 
 // shouldShowNudge checks if we've shown a nudge for this branch recently (5 min).

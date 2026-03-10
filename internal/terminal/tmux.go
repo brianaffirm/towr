@@ -10,14 +10,14 @@ import (
 // TmuxBackend implements Backend using tmux.
 // Each workspace gets its own tmux session named Prefix/<id>.
 type TmuxBackend struct {
-	Prefix string // session name prefix, e.g., "amux"
+	Prefix string // session name prefix, e.g., "towr"
 }
 
 // NewTmuxBackend creates a tmux backend with the given prefix.
 // Sessions are created as prefix/<workspace-id>.
 func NewTmuxBackend(prefix string) *TmuxBackend {
 	if prefix == "" {
-		prefix = "amux"
+		prefix = "towr"
 	}
 	return &TmuxBackend{Prefix: prefix}
 }
@@ -104,7 +104,7 @@ func (t *TmuxBackend) Attach(id string) error {
 	return nil
 }
 
-// ListPanes lists all amux-managed sessions matching the prefix.
+// ListPanes lists all towr-managed sessions matching the prefix.
 func (t *TmuxBackend) ListPanes() ([]PaneInfo, error) {
 	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{pane_current_path}")
 	out, err := cmd.CombinedOutput()

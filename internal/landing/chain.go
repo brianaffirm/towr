@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/brianho/amux/internal/git"
+	"github.com/brianaffirm/towr/internal/git"
 )
 
 // ChainResult holds the outcome of landing multiple workspaces sequentially.

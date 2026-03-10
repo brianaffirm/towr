@@ -8,8 +8,8 @@ import (
 
 func TestManager_Create(t *testing.T) {
 	repo := initTestRepo(t)
-	amuxHome := t.TempDir()
-	t.Setenv("AMUX_HOME", amuxHome)
+	towrHome := t.TempDir()
+	t.Setenv("TOWR_HOME", towrHome)
 
 	store := NewMemoryStore()
 	mgr := NewManager(store)
@@ -27,8 +27,8 @@ func TestManager_Create(t *testing.T) {
 	if ws.Status != StatusReady {
 		t.Errorf("status = %q, want READY", ws.Status)
 	}
-	if ws.Branch != "amux/feat-auth" {
-		t.Errorf("branch = %q, want amux/feat-auth", ws.Branch)
+	if ws.Branch != "towr/feat-auth" {
+		t.Errorf("branch = %q, want towr/feat-auth", ws.Branch)
 	}
 	if ws.BaseRef == "" {
 		t.Error("base_ref should be set")
@@ -40,7 +40,7 @@ func TestManager_Create(t *testing.T) {
 	}
 
 	// Branch should exist.
-	exists, _ := BranchExists(repo, "amux/feat-auth")
+	exists, _ := BranchExists(repo, "towr/feat-auth")
 	if !exists {
 		t.Error("branch should exist after create")
 	}
@@ -48,7 +48,7 @@ func TestManager_Create(t *testing.T) {
 
 func TestManager_Create_DuplicateID(t *testing.T) {
 	repo := initTestRepo(t)
-	t.Setenv("AMUX_HOME", t.TempDir())
+	t.Setenv("TOWR_HOME", t.TempDir())
 
 	store := NewMemoryStore()
 	mgr := NewManager(store)
@@ -94,7 +94,7 @@ func TestManager_Create_Validation(t *testing.T) {
 
 func TestManager_Create_RejectsOverlappingPaths(t *testing.T) {
 	repo := initTestRepo(t)
-	t.Setenv("AMUX_HOME", t.TempDir())
+	t.Setenv("TOWR_HOME", t.TempDir())
 
 	store := NewMemoryStore()
 	mgr := NewManager(store)
@@ -117,7 +117,7 @@ func TestManager_Create_RejectsOverlappingPaths(t *testing.T) {
 
 func TestManager_Get(t *testing.T) {
 	repo := initTestRepo(t)
-	t.Setenv("AMUX_HOME", t.TempDir())
+	t.Setenv("TOWR_HOME", t.TempDir())
 
 	store := NewMemoryStore()
 	mgr := NewManager(store)
@@ -138,7 +138,7 @@ func TestManager_Get(t *testing.T) {
 
 func TestManager_List(t *testing.T) {
 	repo := initTestRepo(t)
-	t.Setenv("AMUX_HOME", t.TempDir())
+	t.Setenv("TOWR_HOME", t.TempDir())
 
 	store := NewMemoryStore()
 	mgr := NewManager(store)
@@ -164,7 +164,7 @@ func TestManager_List(t *testing.T) {
 
 func TestManager_GetByRepo(t *testing.T) {
 	repo := initTestRepo(t)
-	t.Setenv("AMUX_HOME", t.TempDir())
+	t.Setenv("TOWR_HOME", t.TempDir())
 
 	store := NewMemoryStore()
 	mgr := NewManager(store)
@@ -185,7 +185,7 @@ func TestManager_GetByRepo(t *testing.T) {
 
 func TestManager_UpdateStatus(t *testing.T) {
 	repo := initTestRepo(t)
-	t.Setenv("AMUX_HOME", t.TempDir())
+	t.Setenv("TOWR_HOME", t.TempDir())
 
 	store := NewMemoryStore()
 	mgr := NewManager(store)
@@ -210,7 +210,7 @@ func TestManager_UpdateStatus(t *testing.T) {
 
 func TestManager_UpdateStatus_Invalid(t *testing.T) {
 	repo := initTestRepo(t)
-	t.Setenv("AMUX_HOME", t.TempDir())
+	t.Setenv("TOWR_HOME", t.TempDir())
 
 	store := NewMemoryStore()
 	mgr := NewManager(store)
@@ -228,7 +228,7 @@ func TestManager_UpdateStatus_Invalid(t *testing.T) {
 
 func TestManager_Delete(t *testing.T) {
 	repo := initTestRepo(t)
-	t.Setenv("AMUX_HOME", t.TempDir())
+	t.Setenv("TOWR_HOME", t.TempDir())
 
 	store := NewMemoryStore()
 	mgr := NewManager(store)

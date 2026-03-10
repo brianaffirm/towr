@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/brianho/amux/internal/store"
+	"github.com/brianaffirm/towr/internal/store"
 )
 
 // Manager wraps store.Store queue operations with higher-level logic

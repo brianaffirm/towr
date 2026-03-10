@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brianho/amux/internal/store"
-	"github.com/brianho/amux/internal/workspace"
+	"github.com/brianaffirm/towr/internal/store"
+	"github.com/brianaffirm/towr/internal/workspace"
 )
 
 // mockStore implements store.Store for checkpoint testing.

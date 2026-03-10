@@ -1,6 +1,6 @@
 package terminal
 
-// PaneInfo describes a terminal pane managed by amux.
+// PaneInfo describes a terminal pane managed by towr.
 type PaneInfo struct {
 	ID      string
 	Alive   bool
@@ -16,7 +16,7 @@ type Backend interface {
 	DestroyPane(id string) error
 	// Attach switches focus to the given workspace pane.
 	Attach(id string) error
-	// ListPanes returns all amux-managed panes.
+	// ListPanes returns all towr-managed panes.
 	ListPanes() ([]PaneInfo, error)
 	// IsPaneAlive checks whether the pane for the given workspace is running.
 	IsPaneAlive(id string) (bool, error)

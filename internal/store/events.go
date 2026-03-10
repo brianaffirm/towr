@@ -1,4 +1,4 @@
-// Package store provides the event-sourced state store for amux.
+// Package store provides the event-sourced state store for towr.
 package store
 
 import "time"

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/brianho/amux/internal/config"
+	"github.com/brianaffirm/towr/internal/config"
 )
 
 // WorkspaceStore is the persistence interface for workspaces.

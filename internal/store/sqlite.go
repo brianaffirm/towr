@@ -412,7 +412,7 @@ func FindWorkspaceByID(reposDir, ref string) (*Workspace, error) {
 		for _, m := range matches {
 			lines = append(lines, fmt.Sprintf("  %s:%s\t%s", m.repoName, id, m.ws.RepoRoot))
 		}
-		return nil, fmt.Errorf("workspace %q exists in multiple repos:\n%s\nuse \"amux <cmd> <repo>:%s\" to disambiguate",
+		return nil, fmt.Errorf("workspace %q exists in multiple repos:\n%s\nuse \"towr <cmd> <repo>:%s\" to disambiguate",
 			id, strings.Join(lines, "\n"), id)
 	}
 }

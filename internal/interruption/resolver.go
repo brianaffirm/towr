@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/brianho/amux/internal/queue"
-	"github.com/brianho/amux/internal/store"
+	"github.com/brianaffirm/towr/internal/queue"
+	"github.com/brianaffirm/towr/internal/store"
 )
 
 // BlockerType classifies the kind of interruption an agent encountered.

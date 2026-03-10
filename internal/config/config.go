@@ -8,7 +8,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// Config represents the merged amux configuration (global + repo-level).
+// Config represents the merged towr configuration (global + repo-level).
 type Config struct {
 	Defaults      DefaultsConfig                `toml:"defaults"`
 	Cleanup       CleanupConfig                 `toml:"cleanup"`
@@ -103,7 +103,7 @@ func DefaultConfig() *Config {
 	}
 }
 
-// LoadGlobal loads the global config from ~/.amux/global-config.toml.
+// LoadGlobal loads the global config from ~/.towr/global-config.toml.
 // Returns default config if the file doesn't exist.
 func LoadGlobal() (*Config, error) {
 	return LoadFile(GlobalConfigPath())

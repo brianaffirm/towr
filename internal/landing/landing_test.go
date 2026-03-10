@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brianho/amux/internal/git"
+	"github.com/brianaffirm/towr/internal/git"
 )
 
 // --- Mock implementations ---
@@ -128,7 +128,7 @@ func TestHookRunnerSubstitution(t *testing.T) {
 	vars := HookVars{
 		WorkspaceID:  "auth",
 		WorktreePath: "/tmp/wt",
-		Branch:       "amux/auth",
+		Branch:       "towr/auth",
 		BaseBranch:   "main",
 		RepoRoot:     "/tmp/repo",
 	}
@@ -141,8 +141,8 @@ func TestHookRunnerSubstitution(t *testing.T) {
 		t.Errorf("expected exit code 0, got %d", result.ExitCode)
 	}
 	stdout := strings.TrimSpace(result.Stdout)
-	if stdout != "auth amux/auth" {
-		t.Errorf("expected 'auth amux/auth', got %q", stdout)
+	if stdout != "auth towr/auth" {
+		t.Errorf("expected 'auth towr/auth', got %q", stdout)
 	}
 }
 
@@ -205,7 +205,7 @@ func TestLandRebaseFF(t *testing.T) {
 	base := baseBranch(t, repoDir)
 
 	// Create worktree with a feature branch
-	wtDir := createWorktree(t, repoDir, "amux/feature1")
+	wtDir := createWorktree(t, repoDir, "towr/feature1")
 	writeFile(t, filepath.Join(wtDir, "feature.txt"), "feature work")
 	runGit(t, wtDir, "add", ".")
 	runGit(t, wtDir, "commit", "-m", "add feature")
@@ -215,7 +215,7 @@ func TestLandRebaseFF(t *testing.T) {
 		ID:           "feature1",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/feature1",
+		Branch:       "towr/feature1",
 		WorktreePath: wtDir,
 		Status:       StatusReady,
 		Task:         "Add feature 1",
@@ -250,7 +250,7 @@ func TestLandSquash(t *testing.T) {
 	repoDir := initTestRepo(t)
 	base := baseBranch(t, repoDir)
 
-	wtDir := createWorktree(t, repoDir, "amux/squash-test")
+	wtDir := createWorktree(t, repoDir, "towr/squash-test")
 	writeFile(t, filepath.Join(wtDir, "a.txt"), "a")
 	runGit(t, wtDir, "add", ".")
 	runGit(t, wtDir, "commit", "-m", "commit a")
@@ -263,7 +263,7 @@ func TestLandSquash(t *testing.T) {
 		ID:           "squash-test",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/squash-test",
+		Branch:       "towr/squash-test",
 		WorktreePath: wtDir,
 		Status:       StatusReady,
 		Task:         "Squash test task",
@@ -286,7 +286,7 @@ func TestLandFFOnly(t *testing.T) {
 	base := baseBranch(t, repoDir)
 
 	// ff-only works when feature is ahead of base with no divergence
-	wtDir := createWorktree(t, repoDir, "amux/ff-test")
+	wtDir := createWorktree(t, repoDir, "towr/ff-test")
 	writeFile(t, filepath.Join(wtDir, "ff.txt"), "ff content")
 	runGit(t, wtDir, "add", ".")
 	runGit(t, wtDir, "commit", "-m", "ff commit")
@@ -296,7 +296,7 @@ func TestLandFFOnly(t *testing.T) {
 		ID:           "ff-test",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/ff-test",
+		Branch:       "towr/ff-test",
 		WorktreePath: wtDir,
 		Status:       StatusReady,
 	})
@@ -317,7 +317,7 @@ func TestLandMergeCommit(t *testing.T) {
 	repoDir := initTestRepo(t)
 	base := baseBranch(t, repoDir)
 
-	wtDir := createWorktree(t, repoDir, "amux/merge-test")
+	wtDir := createWorktree(t, repoDir, "towr/merge-test")
 	writeFile(t, filepath.Join(wtDir, "merge.txt"), "merge content")
 	runGit(t, wtDir, "add", ".")
 	runGit(t, wtDir, "commit", "-m", "merge commit feature")
@@ -333,7 +333,7 @@ func TestLandMergeCommit(t *testing.T) {
 		ID:           "merge-test",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/merge-test",
+		Branch:       "towr/merge-test",
 		WorktreePath: wtDir,
 		Status:       StatusReady,
 		Task:         "Merge commit test",
@@ -374,7 +374,7 @@ func TestLandForceBypassesStatus(t *testing.T) {
 	repoDir := initTestRepo(t)
 	base := baseBranch(t, repoDir)
 
-	wtDir := createWorktree(t, repoDir, "amux/forced")
+	wtDir := createWorktree(t, repoDir, "towr/forced")
 	writeFile(t, filepath.Join(wtDir, "forced.txt"), "forced")
 	runGit(t, wtDir, "add", ".")
 	runGit(t, wtDir, "commit", "-m", "forced commit")
@@ -384,7 +384,7 @@ func TestLandForceBypassesStatus(t *testing.T) {
 		ID:           "forced",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/forced",
+		Branch:       "towr/forced",
 		WorktreePath: wtDir,
 		Status:       StatusBlocked, // Normally not landable
 	})
@@ -405,7 +405,7 @@ func TestLandPreHookFailure(t *testing.T) {
 	repoDir := initTestRepo(t)
 	base := baseBranch(t, repoDir)
 
-	wtDir := createWorktree(t, repoDir, "amux/hookfail")
+	wtDir := createWorktree(t, repoDir, "towr/hookfail")
 	writeFile(t, filepath.Join(wtDir, "hookfail.txt"), "content")
 	runGit(t, wtDir, "add", ".")
 	runGit(t, wtDir, "commit", "-m", "hook fail commit")
@@ -415,7 +415,7 @@ func TestLandPreHookFailure(t *testing.T) {
 		ID:           "hookfail",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/hookfail",
+		Branch:       "towr/hookfail",
 		WorktreePath: wtDir,
 		Status:       StatusReady,
 	})
@@ -441,7 +441,7 @@ func TestLandNoHooksSkipsHooks(t *testing.T) {
 	repoDir := initTestRepo(t)
 	base := baseBranch(t, repoDir)
 
-	wtDir := createWorktree(t, repoDir, "amux/nohooks")
+	wtDir := createWorktree(t, repoDir, "towr/nohooks")
 	writeFile(t, filepath.Join(wtDir, "nohooks.txt"), "content")
 	runGit(t, wtDir, "add", ".")
 	runGit(t, wtDir, "commit", "-m", "no hooks commit")
@@ -451,7 +451,7 @@ func TestLandNoHooksSkipsHooks(t *testing.T) {
 		ID:           "nohooks",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/nohooks",
+		Branch:       "towr/nohooks",
 		WorktreePath: wtDir,
 		Status:       StatusReady,
 	})
@@ -476,7 +476,7 @@ func TestDryRunClean(t *testing.T) {
 	repoDir := initTestRepo(t)
 	base := baseBranch(t, repoDir)
 
-	wtDir := createWorktree(t, repoDir, "amux/dry-clean")
+	wtDir := createWorktree(t, repoDir, "towr/dry-clean")
 	writeFile(t, filepath.Join(wtDir, "dry.txt"), "dry run content")
 	runGit(t, wtDir, "add", ".")
 	runGit(t, wtDir, "commit", "-m", "dry run commit")
@@ -486,7 +486,7 @@ func TestDryRunClean(t *testing.T) {
 		ID:           "dry-clean",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/dry-clean",
+		Branch:       "towr/dry-clean",
 		WorktreePath: wtDir,
 		Status:       StatusReady,
 	})
@@ -538,17 +538,17 @@ func TestChainLandSuccess(t *testing.T) {
 	base := baseBranch(t, repoDir)
 
 	// Create 3 worktrees with non-conflicting changes
-	wt1 := createWorktree(t, repoDir, "amux/chain1")
+	wt1 := createWorktree(t, repoDir, "towr/chain1")
 	writeFile(t, filepath.Join(wt1, "chain1.txt"), "chain1")
 	runGit(t, wt1, "add", ".")
 	runGit(t, wt1, "commit", "-m", "chain1")
 
-	wt2 := createWorktree(t, repoDir, "amux/chain2")
+	wt2 := createWorktree(t, repoDir, "towr/chain2")
 	writeFile(t, filepath.Join(wt2, "chain2.txt"), "chain2")
 	runGit(t, wt2, "add", ".")
 	runGit(t, wt2, "commit", "-m", "chain2")
 
-	wt3 := createWorktree(t, repoDir, "amux/chain3")
+	wt3 := createWorktree(t, repoDir, "towr/chain3")
 	writeFile(t, filepath.Join(wt3, "chain3.txt"), "chain3")
 	runGit(t, wt3, "add", ".")
 	runGit(t, wt3, "commit", "-m", "chain3")
@@ -560,7 +560,7 @@ func TestChainLandSuccess(t *testing.T) {
 			ID:           id,
 			RepoRoot:     repoDir,
 			BaseBranch:   base,
-			Branch:       "amux/" + id,
+			Branch:       "towr/" + id,
 			WorktreePath: wt,
 			Status:       StatusReady,
 		})
@@ -593,12 +593,12 @@ func TestChainLandConflictStops(t *testing.T) {
 	base := baseBranch(t, repoDir)
 
 	// Create 2 worktrees that conflict with each other
-	wt1 := createWorktree(t, repoDir, "amux/cchain1")
+	wt1 := createWorktree(t, repoDir, "towr/cchain1")
 	writeFile(t, filepath.Join(wt1, "shared.txt"), "version A")
 	runGit(t, wt1, "add", ".")
 	runGit(t, wt1, "commit", "-m", "cchain1")
 
-	wt2 := createWorktree(t, repoDir, "amux/cchain2")
+	wt2 := createWorktree(t, repoDir, "towr/cchain2")
 	writeFile(t, filepath.Join(wt2, "shared.txt"), "version B")
 	runGit(t, wt2, "add", ".")
 	runGit(t, wt2, "commit", "-m", "cchain2")
@@ -608,7 +608,7 @@ func TestChainLandConflictStops(t *testing.T) {
 		ID:           "cchain1",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/cchain1",
+		Branch:       "towr/cchain1",
 		WorktreePath: wt1,
 		Status:       StatusReady,
 	})
@@ -616,7 +616,7 @@ func TestChainLandConflictStops(t *testing.T) {
 		ID:           "cchain2",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/cchain2",
+		Branch:       "towr/cchain2",
 		WorktreePath: wt2,
 		Status:       StatusReady,
 	})
@@ -659,7 +659,7 @@ func TestLandDefaultStrategy(t *testing.T) {
 	repoDir := initTestRepo(t)
 	base := baseBranch(t, repoDir)
 
-	wtDir := createWorktree(t, repoDir, "amux/default-strat")
+	wtDir := createWorktree(t, repoDir, "towr/default-strat")
 	writeFile(t, filepath.Join(wtDir, "default.txt"), "default")
 	runGit(t, wtDir, "add", ".")
 	runGit(t, wtDir, "commit", "-m", "default strategy")
@@ -669,7 +669,7 @@ func TestLandDefaultStrategy(t *testing.T) {
 		ID:           "default-strat",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/default-strat",
+		Branch:       "towr/default-strat",
 		WorktreePath: wtDir,
 		Status:       StatusReady,
 	})
@@ -701,7 +701,7 @@ func TestLandPostHookRuns(t *testing.T) {
 	repoDir := initTestRepo(t)
 	base := baseBranch(t, repoDir)
 
-	wtDir := createWorktree(t, repoDir, "amux/posthook")
+	wtDir := createWorktree(t, repoDir, "towr/posthook")
 	writeFile(t, filepath.Join(wtDir, "posthook.txt"), "content")
 	runGit(t, wtDir, "add", ".")
 	runGit(t, wtDir, "commit", "-m", "posthook commit")
@@ -714,7 +714,7 @@ func TestLandPostHookRuns(t *testing.T) {
 		ID:           "posthook",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/posthook",
+		Branch:       "towr/posthook",
 		WorktreePath: wtDir,
 		Status:       StatusReady,
 	})
@@ -772,7 +772,7 @@ func TestLandPushMode(t *testing.T) {
 	base := baseBranch(t, repoDir)
 
 	// Create worktree with a feature branch
-	wtDir := createWorktree(t, repoDir, "amux/push-feature")
+	wtDir := createWorktree(t, repoDir, "towr/push-feature")
 	writeFile(t, filepath.Join(wtDir, "push-feature.txt"), "push feature work")
 	runGit(t, wtDir, "add", ".")
 	runGit(t, wtDir, "commit", "-m", "add push feature")
@@ -782,7 +782,7 @@ func TestLandPushMode(t *testing.T) {
 		ID:           "push-feature",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/push-feature",
+		Branch:       "towr/push-feature",
 		WorktreePath: wtDir,
 		Status:       StatusReady,
 		Task:         "Push feature test",
@@ -802,8 +802,8 @@ func TestLandPushMode(t *testing.T) {
 	}
 
 	// Push mode should set PushedBranch
-	if result.PushedBranch != "amux/push-feature" {
-		t.Errorf("expected PushedBranch 'amux/push-feature', got %q", result.PushedBranch)
+	if result.PushedBranch != "towr/push-feature" {
+		t.Errorf("expected PushedBranch 'towr/push-feature', got %q", result.PushedBranch)
 	}
 
 	// Status should end at READY, not LANDED
@@ -812,8 +812,8 @@ func TestLandPushMode(t *testing.T) {
 	}
 
 	// Verify the branch was pushed to remote
-	remoteRefs := runGit(t, repoDir, "ls-remote", "--heads", "origin", "amux/push-feature")
-	if !strings.Contains(remoteRefs, "amux/push-feature") {
+	remoteRefs := runGit(t, repoDir, "ls-remote", "--heads", "origin", "towr/push-feature")
+	if !strings.Contains(remoteRefs, "towr/push-feature") {
 		t.Error("expected branch to be pushed to remote")
 	}
 }
@@ -822,7 +822,7 @@ func TestLandPRMode(t *testing.T) {
 	repoDir, _ := initTestRepoWithRemote(t)
 	base := baseBranch(t, repoDir)
 
-	wtDir := createWorktree(t, repoDir, "amux/pr-feature")
+	wtDir := createWorktree(t, repoDir, "towr/pr-feature")
 	writeFile(t, filepath.Join(wtDir, "pr-feature.txt"), "pr feature work")
 	runGit(t, wtDir, "add", ".")
 	runGit(t, wtDir, "commit", "-m", "add pr feature")
@@ -832,7 +832,7 @@ func TestLandPRMode(t *testing.T) {
 		ID:           "pr-feature",
 		RepoRoot:     repoDir,
 		BaseBranch:   base,
-		Branch:       "amux/pr-feature",
+		Branch:       "towr/pr-feature",
 		WorktreePath: wtDir,
 		Status:       StatusReady,
 	})
@@ -849,8 +849,8 @@ func TestLandPRMode(t *testing.T) {
 	if result.MergeCommit != "" {
 		t.Errorf("expected empty MergeCommit in PR mode, got %q", result.MergeCommit)
 	}
-	if result.PushedBranch != "amux/pr-feature" {
-		t.Errorf("expected PushedBranch 'amux/pr-feature', got %q", result.PushedBranch)
+	if result.PushedBranch != "towr/pr-feature" {
+		t.Errorf("expected PushedBranch 'towr/pr-feature', got %q", result.PushedBranch)
 	}
 	if store.statuses["pr-feature"] != StatusReady {
 		t.Errorf("expected status READY after PR push, got %s", store.statuses["pr-feature"])

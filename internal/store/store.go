@@ -58,7 +58,7 @@ type Resolution struct {
 	Response   string `json:"response,omitempty"`
 }
 
-// Store is the primary state API for amux.
+// Store is the primary state API for towr.
 type Store interface {
 	// Workspace CRUD (materialized view of events)
 	SaveWorkspace(w *Workspace) error

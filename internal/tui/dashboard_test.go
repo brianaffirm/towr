@@ -32,9 +32,9 @@ func TestNewDashboardModelAllRepos(t *testing.T) {
 func TestDashboardNavigationKeys(t *testing.T) {
 	m := DashboardModel{
 		workspaces: []WorkspaceRow{
-			{ID: "auth", Status: "READY", Branch: "amux/auth"},
-			{ID: "billing", Status: "RUNNING", Branch: "amux/billing"},
-			{ID: "api", Status: "BLOCKED", Branch: "amux/api"},
+			{ID: "auth", Status: "READY", Branch: "towr/auth"},
+			{ID: "billing", Status: "RUNNING", Branch: "towr/billing"},
+			{ID: "api", Status: "BLOCKED", Branch: "towr/api"},
 		},
 		cursor: 0,
 		view:   viewDashboard,
@@ -86,7 +86,7 @@ func TestDashboardNavigationKeys(t *testing.T) {
 func TestEnterDetailView(t *testing.T) {
 	m := DashboardModel{
 		workspaces: []WorkspaceRow{
-			{ID: "auth", Status: "READY", Branch: "amux/auth"},
+			{ID: "auth", Status: "READY", Branch: "towr/auth"},
 		},
 		cursor: 0,
 		view:   viewDashboard,
@@ -102,7 +102,7 @@ func TestEnterDetailView(t *testing.T) {
 func TestEscBackToDashboard(t *testing.T) {
 	m := DashboardModel{
 		workspaces: []WorkspaceRow{
-			{ID: "auth", Status: "READY", Branch: "amux/auth"},
+			{ID: "auth", Status: "READY", Branch: "towr/auth"},
 		},
 		cursor: 0,
 		view:   viewDetail,
@@ -198,8 +198,8 @@ func TestRenderDashboardWithWorkspaces(t *testing.T) {
 	m := DashboardModel{
 		repoRoot: "/tmp/myrepo",
 		workspaces: []WorkspaceRow{
-			{ID: "auth", Status: "READY", Branch: "amux/auth", Added: 10, Removed: 3, Age: "5m", ExitCode: &exitCode},
-			{ID: "billing", Status: "RUNNING", Branch: "amux/billing", Added: 5, Removed: 1, Age: "10m"},
+			{ID: "auth", Status: "READY", Branch: "towr/auth", Added: 10, Removed: 3, Age: "5m", ExitCode: &exitCode},
+			{ID: "billing", Status: "RUNNING", Branch: "towr/billing", Added: 5, Removed: 1, Age: "10m"},
 		},
 		cursor: 0,
 		view:   viewDashboard,
@@ -220,7 +220,7 @@ func TestRenderDashboardWithWorkspaces(t *testing.T) {
 func TestRenderDetailView(t *testing.T) {
 	m := DashboardModel{
 		workspaces: []WorkspaceRow{
-			{ID: "auth", Status: "READY", Branch: "amux/auth"},
+			{ID: "auth", Status: "READY", Branch: "towr/auth"},
 		},
 		cursor:      0,
 		view:        viewDetail,

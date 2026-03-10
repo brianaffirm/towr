@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brianho/amux/internal/store"
+	"github.com/brianaffirm/towr/internal/store"
 )
 
 // mockStore implements a minimal in-memory store.Store for queue testing.

@@ -29,7 +29,7 @@ func TestWorkspaceStatus_IsValid(t *testing.T) {
 }
 
 func TestBranchName(t *testing.T) {
-	if got := BranchName("feat-auth"); got != "amux/feat-auth" {
-		t.Errorf("BranchName(feat-auth) = %q, want amux/feat-auth", got)
+	if got := BranchName("feat-auth"); got != "towr/feat-auth" {
+		t.Errorf("BranchName(feat-auth) = %q, want towr/feat-auth", got)
 	}
 }

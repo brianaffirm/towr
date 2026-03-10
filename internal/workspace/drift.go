@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/brianho/amux/internal/git"
+	"github.com/brianaffirm/towr/internal/git"
 )
 
 // DriftCount returns how many commits the base branch is ahead of the branch point.

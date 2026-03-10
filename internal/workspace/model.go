@@ -60,7 +60,7 @@ type AgentIdentity struct {
 
 // Checkpoint preserves context for respawn across pauses and crashes.
 type Checkpoint struct {
-	// Implicit — amux captures automatically
+	// Implicit — towr captures automatically
 	DiffSummary      string   `json:"diff_summary,omitempty"`
 	FilesModified    []string `json:"files_modified,omitempty"`
 	CommitsOnBranch  []string `json:"commits_on_branch,omitempty"`
