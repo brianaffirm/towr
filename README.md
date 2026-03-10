@@ -1,21 +1,21 @@
-# amux
+# towr
 
 You're running 4 things at once — an auth refactor, a billing fix, a test migration, and an AI agent experimenting with a new API client. Each one needs its own branch, its own working directory, and its own terminal context. You're juggling `git stash`, tab names, and "wait, which branch am I on?" Every time you land one, you hold your breath.
 
-amux gives you isolated git worktrees per task, tracks them in one place, and lands them safely.
+towr gives you isolated git worktrees per task, tracks them in one place, and lands them safely.
 
 ```
-$ amux spawn "refactor auth" --id auth
-$ amux spawn "fix billing" --id billing
-$ amux spawn "migrate tests" --id tests
+$ towr spawn "refactor auth" --id auth
+$ towr spawn "fix billing" --id billing
+$ towr spawn "migrate tests" --id tests
 
-$ amux ls
+$ towr ls
 ID        STATUS   HEALTH   ACTIVITY   DRIFT   DIFF       TREE    AGENT    AGE
 auth      READY    pass     4m         0       +142/-38   ~3      claude   12m
 billing   READY    fail     15m        +3      +67/-12    clean   claude   45m
 tests     READY    pass     2h         +12     +89/-204   ~1      —        2h
 
-$ amux land auth
+$ towr land auth
 Landed workspace auth
   Strategy:     rebase-ff
   Merge commit: a1b2c3d
@@ -26,18 +26,18 @@ Landed workspace auth
 
 ## Why not just `git worktree`?
 
-| | git worktree | amux |
+| | git worktree | towr |
 |---|---|---|
-| Create isolated workspace | `git worktree add` | `amux spawn` |
-| See what's active | `git worktree list` (no diff stats) | `amux ls` (health, activity, drift, diff, tree, agent) |
-| Review changes | manual `git diff` per worktree | `amux diff`, `amux preview --diff` |
-| Merge safely | manual rebase + merge + cleanup | `amux land` (rebase, hooks, merge, cleanup) |
+| Create isolated workspace | `git worktree add` | `towr spawn` |
+| See what's active | `git worktree list` (no diff stats) | `towr ls` (health, activity, drift, diff, tree, agent) |
+| Review changes | manual `git diff` per worktree | `towr diff`, `towr preview --diff` |
+| Merge safely | manual rebase + merge + cleanup | `towr land` (rebase, hooks, merge, cleanup) |
 | Block bad merges | nothing built-in | pre-land hooks, protected branches |
 | Track what happened | nothing | event-sourced audit log |
-| Clean up stale work | manual | `amux cleanup --stale`, `amux doctor` |
+| Clean up stale work | manual | `towr cleanup --stale`, `towr doctor` |
 | Dashboard | nothing | TUI with live refresh |
 
-amux is the workflow around worktrees that git doesn't give you.
+towr is the workflow around worktrees that git doesn't give you.
 
 ## Install
 
@@ -45,14 +45,14 @@ amux is the workflow around worktrees that git doesn't give you.
 
 ```bash
 brew tap brianaffirm/tap
-brew install amux
+brew install towr
 ```
 
 ### From source
 
 ```bash
-git clone https://github.com/brianaffirm/amux.git
-cd amux && go install ./cmd/amux/
+git clone https://github.com/brianaffirm/towr.git
+cd towr && go install ./cmd/towr/
 ```
 
 Requires Go 1.21+ and git. tmux is optional (enables terminal management and preview panes).
@@ -63,34 +63,34 @@ Requires Go 1.21+ and git. tmux is optional (enables terminal management and pre
 cd ~/my-project
 
 # Create workspaces
-amux spawn "add authentication" --id auth
-amux spawn "fix payment flow" --id payments
-amux spawn                       # quick: auto-generates ws-0001
-amux spawn "fix billing" --env SUBPROJECT=services/billing  # monolith
+towr spawn "add authentication" --id auth
+towr spawn "fix payment flow" --id payments
+towr spawn                       # quick: auto-generates ws-0001
+towr spawn "fix billing" --env SUBPROJECT=services/billing  # monolith
 
 # Already working on a branch? Adopt it
-amux adopt                       # adopt current branch
-amux adopt feature/login         # adopt by branch name
+towr adopt                       # adopt current branch
+towr adopt feature/login         # adopt by branch name
 
 # Check status
-amux ls
+towr ls
 
 # Review changes
-amux diff auth
-amux preview --diff          # show diff in tmux split pane
+towr diff auth
+towr preview --diff          # show diff in tmux split pane
 
 # Land when ready
-amux land auth               # rebase, validate hooks, merge, clean up
-amux land payments --pr      # push + print PR URL
+towr land auth               # rebase, validate hooks, merge, clean up
+towr land payments --pr      # push + print PR URL
 
 # Clean up
-amux cleanup payments
-amux doctor                  # find orphaned state
+towr cleanup payments
+towr doctor                  # find orphaned state
 ```
 
 ## How `land` works
 
-Landing is where amux earns its keep. `amux land` is not a convenience alias for `git merge` — it's a pipeline:
+Landing is where towr earns its keep. `towr land` is not a convenience alias for `git merge` — it's a pipeline:
 
 1. **Validate** — check workspace status and branch state
 2. **Run pre-land hooks** — your tests, lints, whatever. If they fail, the workspace is marked BLOCKED and the merge is aborted. Nothing lands dirty.
@@ -104,43 +104,43 @@ If anything fails at any step, the workspace stays intact for inspection. Nothin
 ### Landing options
 
 ```bash
-amux land auth                # local merge (default: rebase-ff)
-amux land auth --squash       # squash all commits into one
-amux land auth --pr           # push + generate PR URL instead of local merge
-amux land auth --dry-run      # preview: check conflicts, show files changed
-amux land auth billing tests --chain  # land sequentially, rebase remaining onto updated base
-amux land auth --force --reason "hotfix"  # bypass status check with audit trail
+towr land auth                # local merge (default: rebase-ff)
+towr land auth --squash       # squash all commits into one
+towr land auth --pr           # push + generate PR URL instead of local merge
+towr land auth --dry-run      # preview: check conflicts, show files changed
+towr land auth billing tests --chain  # land sequentially, rebase remaining onto updated base
+towr land auth --force --reason "hotfix"  # bypass status check with audit trail
 ```
 
 Protected branches (`main`, `master`, `develop`, `release/*`) block local merge by default — use `--pr` or `--push` instead.
 
 ## Working with AI agents
 
-amux works with Claude Code, Cursor, Aider, or anything that runs in a terminal. Each agent gets its own isolated worktree — no branch conflicts, no stash juggling.
+towr works with Claude Code, Cursor, Aider, or anything that runs in a terminal. Each agent gets its own isolated worktree — no branch conflicts, no stash juggling.
 
 ```bash
 # Give an agent its own workspace
-amux spawn "implement caching layer" --id cache --agent claude-code
+towr spawn "implement caching layer" --id cache --agent claude-code
 
 # While it works, start another task yourself
-amux spawn "update API docs" --id docs
+towr spawn "update API docs" --id docs
 
 # Check on both
-amux ls
+towr ls
 
 # Review the agent's work before landing
-amux diff cache
-amux land cache --dry-run    # preview what would merge
+towr diff cache
+towr land cache --dry-run    # preview what would merge
 
 # Land it if it looks good
-amux land cache
+towr land cache
 ```
 
-The `--agent` flag tags the workspace with the runtime identifier, tracked in the audit log. `amux preview --diff` pushes diffs into a tmux split pane so agents can see changes without switching context.
+The `--agent` flag tags the workspace with the runtime identifier, tracked in the audit log. `towr preview --diff` pushes diffs into a tmux split pane so agents can see changes without switching context.
 
 ## TUI Dashboard
 
-Run `amux` with no arguments for an interactive dashboard:
+Run `towr` with no arguments for an interactive dashboard:
 
 <!-- TODO: add screenshot (see inbox 013) -->
 
@@ -153,26 +153,26 @@ Run `amux` with no arguments for an interactive dashboard:
 
 | Command | Description |
 |---------|-------------|
-| `amux spawn [task] [--env K=V]` | Create workspace (branch + worktree). No args = auto-ID |
-| `amux adopt [path-or-branch]` | Adopt existing worktree/branch as amux workspace |
-| `amux ls` | List workspaces with diff stats and tree status |
-| `amux land <id>` | Validate, rebase, merge, clean up |
-| `amux land <id> --pr` | Push + print PR URL |
-| `amux land <id> --squash` | Squash commits before merge |
-| `amux land <id> --dry-run` | Preview merge without executing |
-| `amux land <id1> <id2> --chain` | Land multiple workspaces sequentially |
-| `amux diff <id>` | Show changes against base |
-| `amux log <id>` | Show workspace event history |
-| `amux open <id>` | Switch to workspace tmux session |
-| `amux preview --diff` | Show diff in tmux split pane |
-| `amux cleanup <id>` | Remove workspace |
-| `amux cleanup --stale` | Remove workspaces older than threshold |
-| `amux cleanup --merged` | Remove workspaces whose branches are merged |
-| `amux doctor` | Diagnose orphaned worktrees, missing branches |
-| `amux queue` | Show pending approval items |
-| `amux approve/deny/respond <id>` | Resolve approval items |
-| `amux overlap` | Detect file overlaps between workspaces (merge conflict risk) |
-| `amux shell-hook` | Print shell integration for prompt nudges |
+| `towr spawn [task] [--env K=V]` | Create workspace (branch + worktree). No args = auto-ID |
+| `towr adopt [path-or-branch]` | Adopt existing worktree/branch as towr workspace |
+| `towr ls` | List workspaces with diff stats and tree status |
+| `towr land <id>` | Validate, rebase, merge, clean up |
+| `towr land <id> --pr` | Push + print PR URL |
+| `towr land <id> --squash` | Squash commits before merge |
+| `towr land <id> --dry-run` | Preview merge without executing |
+| `towr land <id1> <id2> --chain` | Land multiple workspaces sequentially |
+| `towr diff <id>` | Show changes against base |
+| `towr log <id>` | Show workspace event history |
+| `towr open <id>` | Switch to workspace tmux session |
+| `towr preview --diff` | Show diff in tmux split pane |
+| `towr cleanup <id>` | Remove workspace |
+| `towr cleanup --stale` | Remove workspaces older than threshold |
+| `towr cleanup --merged` | Remove workspaces whose branches are merged |
+| `towr doctor` | Diagnose orphaned worktrees, missing branches |
+| `towr queue` | Show pending approval items |
+| `towr approve/deny/respond <id>` | Resolve approval items |
+| `towr overlap` | Detect file overlaps between workspaces (merge conflict risk) |
+| `towr shell-hook` | Print shell integration for prompt nudges |
 
 All commands support `--json` for scripting.
 
@@ -181,18 +181,18 @@ All commands support `--json` for scripting.
 Add to your `~/.zshrc` or `~/.bashrc`:
 
 ```bash
-eval "$(amux shell-hook)"
+eval "$(towr shell-hook)"
 ```
 
-When you're on an untracked branch with uncommitted changes, amux nudges:
+When you're on an untracked branch with uncommitted changes, towr nudges:
 
 ```
-amux: untracked work on feat/auth — 'amux adopt' to track
+towr: untracked work on feat/auth — 'towr adopt' to track
 ```
 
 ## Configuration
 
-Global config at `~/.amux/global-config.toml`, per-repo config at `.amux.toml` in your repo root (repo config overlays global):
+Global config at `~/.towr/global-config.toml`, per-repo config at `.towr.toml` in your repo root (repo config overlays global):
 
 ```toml
 [defaults]
@@ -220,10 +220,10 @@ Pre-land hooks block the merge if they fail. Post-land hooks are non-blocking.
 
 ## How it works
 
-State lives in `~/.amux/`, not in your repo. No files to gitignore, no risk of committing logs.
+State lives in `~/.towr/`, not in your repo. No files to gitignore, no risk of committing logs.
 
 ```
-~/.amux/
+~/.towr/
   repos/<hash>/
     state.db        SQLite — workspace records + event-sourced state
     audit.jsonl     Append-only audit trail (every spawn, land, hook, conflict)
@@ -233,12 +233,12 @@ State lives in `~/.amux/`, not in your repo. No files to gitignore, no risk of c
     billing/        Git worktree for "billing" workspace
 ```
 
-Every action — spawn, land, hook execution, conflict, cleanup — is recorded as an immutable event. `amux log <id>` shows the full history. `audit.jsonl` is machine-readable for compliance or debugging.
+Every action — spawn, land, hook execution, conflict, cleanup — is recorded as an immutable event. `towr log <id>` shows the full history. `audit.jsonl` is machine-readable for compliance or debugging.
 
 ## Requirements
 
 - **git** 2.15+ (for `git worktree` support)
-- **tmux** (optional) — enables `amux open`, `amux preview`, and TUI session switching. Without tmux, amux falls back gracefully: `open` prints the worktree path, `preview` is unavailable.
+- **tmux** (optional) — enables `towr open`, `towr preview`, and TUI session switching. Without tmux, towr falls back gracefully: `open` prints the worktree path, `preview` is unavailable.
 
 ## License
 
