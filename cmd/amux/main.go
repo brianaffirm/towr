@@ -128,6 +128,8 @@ func run() error {
 		newRespondCmd(initApp, &jsonFlag),
 		newPreviewCmd(initApp, &jsonFlag),
 		newTUICmd(initApp),
+		newShellHookCmd(),
+		newNudgeCmd(),
 	)
 
 	// If no subcommand was provided, launch the TUI dashboard.
