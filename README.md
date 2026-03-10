@@ -65,6 +65,11 @@ cd ~/my-project
 # Create workspaces
 amux spawn "add authentication" --id auth
 amux spawn "fix payment flow" --id payments
+amux spawn                       # quick: auto-generates ws-0001
+
+# Already working on a branch? Adopt it
+amux adopt                       # adopt current branch
+amux adopt feature/login         # adopt by branch name
 
 # Check status
 amux ls
@@ -103,6 +108,7 @@ amux land auth --squash       # squash all commits into one
 amux land auth --pr           # push + generate PR URL instead of local merge
 amux land auth --dry-run      # preview: check conflicts, show files changed
 amux land auth billing tests --chain  # land sequentially, rebase remaining onto updated base
+amux land auth --force --reason "hotfix"  # bypass status check with audit trail
 ```
 
 Protected branches (`main`, `master`, `develop`, `release/*`) block local merge by default — use `--pr` or `--push` instead.
@@ -146,7 +152,8 @@ Run `amux` with no arguments for an interactive dashboard:
 
 | Command | Description |
 |---------|-------------|
-| `amux spawn <task> --id <id>` | Create workspace (branch + worktree) |
+| `amux spawn [task]` | Create workspace (branch + worktree). No args = auto-ID |
+| `amux adopt [path-or-branch]` | Adopt existing worktree/branch as amux workspace |
 | `amux ls` | List workspaces with diff stats and tree status |
 | `amux land <id>` | Validate, rebase, merge, clean up |
 | `amux land <id> --pr` | Push + print PR URL |
@@ -163,8 +170,23 @@ Run `amux` with no arguments for an interactive dashboard:
 | `amux doctor` | Diagnose orphaned worktrees, missing branches |
 | `amux queue` | Show pending approval items |
 | `amux approve/deny/respond <id>` | Resolve approval items |
+| `amux shell-hook` | Print shell integration for prompt nudges |
 
 All commands support `--json` for scripting.
+
+## Shell integration
+
+Add to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
+eval "$(amux shell-hook)"
+```
+
+When you're on an untracked branch with uncommitted changes, amux nudges:
+
+```
+amux: untracked work on feat/auth — 'amux adopt' to track
+```
 
 ## Configuration
 
