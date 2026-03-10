@@ -5,20 +5,42 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 )
+
+var migrateOnce sync.Once
 
 // TowrHome returns the root towr directory, defaulting to ~/.towr.
 // Respects the TOWR_HOME environment variable for overriding.
+// On first call, auto-migrates from ~/.amux if needed.
 func TowrHome() string {
 	if v := os.Getenv("TOWR_HOME"); v != "" {
 		return v
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		// Fallback — should not happen in practice.
 		return filepath.Join(os.TempDir(), ".towr")
 	}
+	migrateOnce.Do(func() { migrateFromAmux(home) })
 	return filepath.Join(home, ".towr")
+}
+
+// migrateFromAmux renames ~/.amux to ~/.towr if the old path exists
+// and the new path does not. Prints a one-time notice.
+func migrateFromAmux(home string) {
+	oldPath := filepath.Join(home, ".amux")
+	newPath := filepath.Join(home, ".towr")
+	if _, err := os.Stat(newPath); err == nil {
+		return // already migrated
+	}
+	if _, err := os.Stat(oldPath); err != nil {
+		return // nothing to migrate
+	}
+	if err := os.Rename(oldPath, newPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not migrate %s → %s: %v\n", oldPath, newPath, err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "Migrated %s → %s\n", oldPath, newPath)
 }
 
 // RepoStatePath returns the per-repo state directory: ~/.towr/repos/<hash>/
