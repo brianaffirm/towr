@@ -98,18 +98,20 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 			}
 
 			columns := []cli.Column{
-				{Header: "ID", Width: 16},
-				{Header: "STATUS", Width: 12},
-				{Header: "BASE", Width: 10},
-				{Header: "BRANCH", Width: 24},
-				{Header: "DIFF", Width: 12},
-				{Header: "TREE", Width: 12},
-				{Header: "AGE", Width: 6},
+				{Header: "ID", Width: 14},
+				{Header: "STATUS", Width: 10},
+				{Header: "HEALTH", Width: 8},
+				{Header: "ACTIVITY", Width: 10},
+				{Header: "DRIFT", Width: 6},
+				{Header: "DIFF", Width: 10},
+				{Header: "TREE", Width: 10},
+				{Header: "AGENT", Width: 8},
+				{Header: "AGE", Width: 5},
 			}
 			if showRepoColumn {
 				// Insert REPO column after ID.
 				columns = append([]cli.Column{
-					{Header: "ID", Width: 16},
+					{Header: "ID", Width: 14},
 					{Header: "REPO", Width: 12},
 				}, columns[1:]...)
 			}
@@ -117,23 +119,29 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 			table := cli.NewTablePrinter(os.Stdout, columns)
 			table.PrintHeader()
 
+			// Query health for each workspace. Only available in repo-scoped mode
+			// because hook events are stored per-repo — querying from the wrong
+			// store would return incorrect results for cross-repo workspaces.
+			var healthMap map[string]string
+			if app != nil && !showRepoColumn {
+				healthMap = make(map[string]string)
+				for _, ws := range workspaces {
+					healthMap[ws.ID] = app.store.LastHookResult(ws.RepoRoot, ws.ID)
+				}
+			}
+
 			for _, ws := range workspaces {
 				isNonRepo := ws.RepoRoot == ""
 
-				var diffStr, treeStr, statusStr, branchStr, baseStr string
+				var diffStr, treeStr, statusStr string
 				if isNonRepo {
-					// Non-repo workspace: no git operations.
 					diffStr = "-"
 					treeStr = "-"
 					statusStr = cli.ColorStatus(ws.Status)
-					branchStr = "(no git)"
-					baseStr = "-"
 				} else {
 					added, removed := getDiffCounts(ws.RepoRoot, ws.BaseBranch, ws.Branch)
 					diffStr = cli.FormatDiff(added, removed)
-					branchStr = ws.Branch
 
-					// Worktree status: staged/unstaged/untracked.
 					treeStr = "-"
 					if ws.WorktreePath != "" {
 						ds, err := workspace.WorktreeDetailedStatus(ws.WorktreePath)
@@ -142,13 +150,36 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 						}
 					}
 
-					// Show "merged" instead of status if branch is fully merged into base.
 					statusStr = cli.ColorStatus(ws.Status)
 					if workspace.IsBranchMerged(ws.RepoRoot, ws.BaseBranch, ws.Branch, ws.BaseRef) {
 						statusStr = cli.FormatMergeStatus(true)
 					}
+				}
 
-					baseStr = ws.BaseBranch
+				// Health.
+				healthStr := "-"
+				if healthMap != nil {
+					if h := healthMap[ws.ID]; h != "" {
+						healthStr = h
+					}
+				}
+
+				// Activity.
+				activityStr := cli.FormatAgeFromString(ws.LastActivity)
+
+				// Drift.
+				driftStr := "0"
+				if !isNonRepo {
+					drift := workspace.DriftCount(ws.RepoRoot, ws.BaseBranch, ws.Branch)
+					if drift > 0 {
+						driftStr = fmt.Sprintf("+%d", drift)
+					}
+				}
+
+				// Agent.
+				agentStr := "-"
+				if ws.AgentRuntime != "" {
+					agentStr = ws.AgentRuntime
 				}
 
 				age := cli.FormatAgeFromString(ws.CreatedAt)
@@ -156,10 +187,12 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 				row := []string{
 					ws.ID,
 					statusStr,
-					baseStr,
-					branchStr,
+					healthStr,
+					activityStr,
+					driftStr,
 					diffStr,
 					treeStr,
+					agentStr,
 					age,
 				}
 				if showRepoColumn {

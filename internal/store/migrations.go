@@ -3,9 +3,10 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
-const currentSchemaVersion = 1
+const currentSchemaVersion = 2
 
 // schema_v1 creates the initial database schema.
 const schema_v1 = `
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
     terminal_target TEXT,
     created_at TEXT,
     updated_at TEXT,
+    last_activity TEXT,
     PRIMARY KEY (id, repo_root)
 );
 
@@ -80,7 +82,8 @@ func migrate(db *sql.DB) error {
 		if _, err := db.Exec(schema_v1); err != nil {
 			return fmt.Errorf("apply schema v1: %w", err)
 		}
-		if err := setSchemaVersion(db, 1); err != nil {
+		// Fresh database: schema_v1 already includes all columns through v2.
+		if err := setSchemaVersion(db, currentSchemaVersion); err != nil {
 			return fmt.Errorf("set schema version: %w", err)
 		}
 		return nil
@@ -90,8 +93,22 @@ func migrate(db *sql.DB) error {
 		return fmt.Errorf("database schema version %d is newer than supported version %d", ver, currentSchemaVersion)
 	}
 
-	// Future migrations go here:
-	// if ver < 2 { migrate_v1_to_v2(db); ver = 2 }
+	if ver < 2 {
+		// Add last_activity column. Ignore "duplicate column" for fresh v2 DBs
+		// where schema_v1 already includes the column.
+		if _, err := db.Exec(`ALTER TABLE workspaces ADD COLUMN last_activity TEXT`); err != nil {
+			if !isDuplicateColumnErr(err) {
+				return fmt.Errorf("apply schema v2 (add last_activity): %w", err)
+			}
+		}
+		// Backfill last_activity from updated_at.
+		if _, err := db.Exec(`UPDATE workspaces SET last_activity = updated_at WHERE last_activity IS NULL`); err != nil {
+			return fmt.Errorf("apply schema v2 (backfill last_activity): %w", err)
+		}
+		if err := setSchemaVersion(db, 2); err != nil {
+			return fmt.Errorf("set schema version: %w", err)
+		}
+	}
 
 	return nil
 }
@@ -105,4 +122,9 @@ func getSchemaVersion(db *sql.DB) (int, error) {
 func setSchemaVersion(db *sql.DB, ver int) error {
 	_, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", ver))
 	return err
+}
+
+// isDuplicateColumnErr returns true if the error is a SQLite "duplicate column" error.
+func isDuplicateColumnErr(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "duplicate column")
 }

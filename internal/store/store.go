@@ -23,6 +23,7 @@ type Workspace struct {
 	TerminalTarget    string          `json:"terminal_target,omitempty"`
 	CreatedAt         string          `json:"created_at,omitempty"`
 	UpdatedAt         string          `json:"updated_at,omitempty"`
+	LastActivity      string          `json:"last_activity,omitempty"`
 }
 
 // ListFilter controls workspace listing.
