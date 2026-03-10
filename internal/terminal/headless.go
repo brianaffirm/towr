@@ -41,6 +41,10 @@ func (h *HeadlessBackend) PasteBuffer(id, content string) error {
 	return fmt.Errorf("paste-buffer not supported in headless mode")
 }
 
+func (h *HeadlessBackend) CapturePane(id string, lines int) (string, error) {
+	return "", fmt.Errorf("capture-pane not supported in headless mode")
+}
+
 func (h *HeadlessBackend) IsHeadless() bool {
 	return true
 }

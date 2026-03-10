@@ -169,6 +169,17 @@ func (t *TmuxBackend) IsPaneAlive(id string) (bool, error) {
 	return true, nil
 }
 
+// CapturePane captures the last N lines from the workspace's chat window.
+func (t *TmuxBackend) CapturePane(id string, lines int) (string, error) {
+	session := t.sessionName(id)
+	cmd := exec.Command("tmux", "capture-pane", "-t", session+":chat", "-p", "-S", fmt.Sprintf("-%d", lines))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("capture-pane: %w", err)
+	}
+	return string(out), nil
+}
+
 func (t *TmuxBackend) IsHeadless() bool {
 	return false
 }

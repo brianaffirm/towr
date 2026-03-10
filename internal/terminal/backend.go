@@ -24,6 +24,9 @@ type Backend interface {
 	SendKeys(id, keys string) error
 	// PasteBuffer loads content into a tmux buffer and pastes it into the workspace pane.
 	PasteBuffer(id, content string) error
+	// CapturePane captures the visible content of the workspace's chat pane.
+	// lines specifies how many lines of scrollback to capture.
+	CapturePane(id string, lines int) (string, error)
 	// IsHeadless returns true if the backend cannot manage terminal sessions.
 	IsHeadless() bool
 }
