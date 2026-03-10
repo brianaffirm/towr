@@ -195,11 +195,16 @@ func (s *SQLiteStore) SaveWorkspace(w *Workspace) error {
 		w.LastActivity = w.UpdatedAt
 	}
 
+	envVars := sql.NullString{}
+	if len(w.EnvVars) > 0 {
+		envVars = sql.NullString{String: string(w.EnvVars), Valid: true}
+	}
+
 	_, err := s.db.Exec(
 		`INSERT INTO workspaces (id, repo_root, base_branch, base_ref, branch, worktree_path,
 		    source_kind, source_value, status, agent_runtime, agent_id, agent_model_version,
-		    exit_code, error, merge_commit, checkpoint, terminal_target, created_at, updated_at, last_activity)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		    exit_code, error, merge_commit, checkpoint, terminal_target, created_at, updated_at, last_activity, env_vars)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id, repo_root) DO UPDATE SET
 		    base_branch=excluded.base_branch, base_ref=excluded.base_ref,
 		    branch=excluded.branch, worktree_path=excluded.worktree_path,
@@ -208,10 +213,11 @@ func (s *SQLiteStore) SaveWorkspace(w *Workspace) error {
 		    agent_id=excluded.agent_id, agent_model_version=excluded.agent_model_version,
 		    exit_code=excluded.exit_code, error=excluded.error,
 		    merge_commit=excluded.merge_commit, checkpoint=excluded.checkpoint,
-		    terminal_target=excluded.terminal_target, updated_at=excluded.updated_at, last_activity=excluded.last_activity`,
+		    terminal_target=excluded.terminal_target, updated_at=excluded.updated_at, last_activity=excluded.last_activity,
+		    env_vars=excluded.env_vars`,
 		w.ID, w.RepoRoot, w.BaseBranch, w.BaseRef, w.Branch, w.WorktreePath,
 		w.SourceKind, w.SourceValue, w.Status, w.AgentRuntime, w.AgentID, w.AgentModelVersion,
-		exitCode, w.Error, w.MergeCommit, checkpoint, w.TerminalTarget, w.CreatedAt, w.UpdatedAt, w.LastActivity,
+		exitCode, w.Error, w.MergeCommit, checkpoint, w.TerminalTarget, w.CreatedAt, w.UpdatedAt, w.LastActivity, envVars,
 	)
 	if err != nil {
 		return fmt.Errorf("save workspace: %w", err)
@@ -223,19 +229,19 @@ func (s *SQLiteStore) SaveWorkspace(w *Workspace) error {
 func (s *SQLiteStore) GetWorkspace(repoRoot, id string) (*Workspace, error) {
 	w := &Workspace{}
 	var exitCode sql.NullInt64
-	var checkpoint sql.NullString
+	var checkpoint, envVars sql.NullString
 
 	err := s.db.QueryRow(
 		`SELECT id, repo_root, base_branch, base_ref, branch, worktree_path,
 		    source_kind, source_value, status, agent_runtime, agent_id, agent_model_version,
 		    exit_code, error, merge_commit, checkpoint, terminal_target, created_at, updated_at,
-		    COALESCE(last_activity, updated_at)
+		    COALESCE(last_activity, updated_at), env_vars
 		 FROM workspaces WHERE id = ? AND repo_root = ?`, id, repoRoot,
 	).Scan(
 		&w.ID, &w.RepoRoot, &w.BaseBranch, &w.BaseRef, &w.Branch, &w.WorktreePath,
 		&w.SourceKind, &w.SourceValue, &w.Status, &w.AgentRuntime, &w.AgentID, &w.AgentModelVersion,
 		&exitCode, &w.Error, &w.MergeCommit, &checkpoint, &w.TerminalTarget, &w.CreatedAt, &w.UpdatedAt,
-		&w.LastActivity,
+		&w.LastActivity, &envVars,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -250,6 +256,9 @@ func (s *SQLiteStore) GetWorkspace(repoRoot, id string) (*Workspace, error) {
 	}
 	if checkpoint.Valid {
 		w.Checkpoint = json.RawMessage(checkpoint.String)
+	}
+	if envVars.Valid {
+		w.EnvVars = json.RawMessage(envVars.String)
 	}
 
 	return w, nil
@@ -272,7 +281,7 @@ func (s *SQLiteStore) ListWorkspaces(repoRoot string, filter ListFilter) ([]*Wor
 	q := `SELECT id, repo_root, base_branch, base_ref, branch, worktree_path,
 	    source_kind, source_value, status, agent_runtime, agent_id, agent_model_version,
 	    exit_code, error, merge_commit, checkpoint, terminal_target, created_at, updated_at,
-	    COALESCE(last_activity, updated_at)
+	    COALESCE(last_activity, updated_at), env_vars
 	 FROM workspaces`
 	if len(clauses) > 0 {
 		q += " WHERE " + strings.Join(clauses, " AND ")
@@ -289,13 +298,13 @@ func (s *SQLiteStore) ListWorkspaces(repoRoot string, filter ListFilter) ([]*Wor
 	for rows.Next() {
 		w := &Workspace{}
 		var exitCode sql.NullInt64
-		var checkpoint sql.NullString
+		var checkpoint, envVars sql.NullString
 
 		if err := rows.Scan(
 			&w.ID, &w.RepoRoot, &w.BaseBranch, &w.BaseRef, &w.Branch, &w.WorktreePath,
 			&w.SourceKind, &w.SourceValue, &w.Status, &w.AgentRuntime, &w.AgentID, &w.AgentModelVersion,
 			&exitCode, &w.Error, &w.MergeCommit, &checkpoint, &w.TerminalTarget, &w.CreatedAt, &w.UpdatedAt,
-			&w.LastActivity,
+			&w.LastActivity, &envVars,
 		); err != nil {
 			return nil, fmt.Errorf("scan workspace: %w", err)
 		}
@@ -306,6 +315,9 @@ func (s *SQLiteStore) ListWorkspaces(repoRoot string, filter ListFilter) ([]*Wor
 		}
 		if checkpoint.Valid {
 			w.Checkpoint = json.RawMessage(checkpoint.String)
+		}
+		if envVars.Valid {
+			w.EnvVars = json.RawMessage(envVars.String)
 		}
 
 		result = append(result, w)

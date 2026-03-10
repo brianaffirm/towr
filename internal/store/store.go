@@ -24,6 +24,7 @@ type Workspace struct {
 	CreatedAt         string          `json:"created_at,omitempty"`
 	UpdatedAt         string          `json:"updated_at,omitempty"`
 	LastActivity      string          `json:"last_activity,omitempty"`
+	EnvVars           json.RawMessage `json:"env_vars,omitempty"`
 }
 
 // ListFilter controls workspace listing.

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const currentSchemaVersion = 2
+const currentSchemaVersion = 3
 
 // schema_v1 creates the initial database schema.
 const schema_v1 = `
@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
     created_at TEXT,
     updated_at TEXT,
     last_activity TEXT,
+    env_vars JSON,
     PRIMARY KEY (id, repo_root)
 );
 
@@ -106,6 +107,17 @@ func migrate(db *sql.DB) error {
 			return fmt.Errorf("apply schema v2 (backfill last_activity): %w", err)
 		}
 		if err := setSchemaVersion(db, 2); err != nil {
+			return fmt.Errorf("set schema version: %w", err)
+		}
+	}
+
+	if ver < 3 {
+		if _, err := db.Exec(`ALTER TABLE workspaces ADD COLUMN env_vars JSON`); err != nil {
+			if !isDuplicateColumnErr(err) {
+				return fmt.Errorf("apply schema v3 (add env_vars): %w", err)
+			}
+		}
+		if err := setSchemaVersion(db, 3); err != nil {
 			return fmt.Errorf("set schema version: %w", err)
 		}
 	}

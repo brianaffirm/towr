@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -28,6 +29,7 @@ func newSpawnCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Com
 		noHooksFlag   bool
 		copyPathsFlag string
 		linkPathsFlag string
+		envFlags    []string
 	)
 
 	cmd := &cobra.Command{
@@ -150,9 +152,20 @@ func newSpawnCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Com
 				return fmt.Errorf("spawn failed: %w", err)
 			}
 
+			// Parse and persist env vars.
+			envMap := parseEnvFlags(envFlags)
+			if len(envMap) > 0 {
+				envJSON, _ := json.Marshal(envMap)
+				sw, _ := app.store.GetWorkspace(app.repoRoot, wsID)
+				if sw != nil {
+					sw.EnvVars = envJSON
+					_ = app.store.SaveWorkspace(sw)
+				}
+			}
+
 			// Run post-create hooks if configured and not disabled.
 			if !noHooksFlag && app.cfg.Hooks.PostCreate != "" {
-				if hookErr := runShellHook(app.cfg.Hooks.PostCreate, ws); hookErr != nil {
+				if hookErr := runShellHookWithEnv(app.cfg.Hooks.PostCreate, ws, envMap); hookErr != nil {
 					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: post-create hook failed: %v\n", hookErr)
 				}
 			}
@@ -195,6 +208,7 @@ func newSpawnCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Com
 	cmd.Flags().BoolVar(&noHooksFlag, "no-hooks", false, "skip post-create hooks")
 	cmd.Flags().StringVar(&copyPathsFlag, "copy-paths", "", "comma-separated paths to copy into worktree (additive with config)")
 	cmd.Flags().StringVar(&linkPathsFlag, "link-paths", "", "comma-separated paths to symlink into worktree (additive with config)")
+	cmd.Flags().StringArrayVar(&envFlags, "env", nil, "environment variable KEY=VAL (repeatable, passed to hooks)")
 
 	return cmd
 }
@@ -330,6 +344,42 @@ func slugify(s string) string {
 		return "workspace"
 	}
 	return string(result)
+}
+
+// parseEnvFlags parses --env KEY=VAL flags into a map.
+func parseEnvFlags(flags []string) map[string]string {
+	if len(flags) == 0 {
+		return nil
+	}
+	m := make(map[string]string, len(flags))
+	for _, f := range flags {
+		parts := strings.SplitN(f, "=", 2)
+		if len(parts) == 2 {
+			m[parts[0]] = parts[1]
+		}
+	}
+	return m
+}
+
+// runShellHookWithEnv runs a hook command with variable substitution and extra env vars.
+func runShellHookWithEnv(hookCmd string, ws *workspace.Workspace, envVars map[string]string) error {
+	expanded := hookCmd
+	expanded = strings.ReplaceAll(expanded, "${WORKSPACE_ID}", ws.ID)
+	expanded = strings.ReplaceAll(expanded, "${WORKTREE_PATH}", ws.WorktreePath)
+	expanded = strings.ReplaceAll(expanded, "${BRANCH}", ws.Branch)
+	expanded = strings.ReplaceAll(expanded, "${BASE_BRANCH}", ws.BaseBranch)
+	expanded = strings.ReplaceAll(expanded, "${REPO_ROOT}", ws.RepoRoot)
+	for k, v := range envVars {
+		expanded = strings.ReplaceAll(expanded, "${"+k+"}", v)
+	}
+
+	cmd := exec.Command("/bin/sh", "-c", expanded)
+	cmd.Dir = ws.WorktreePath
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // runShellHook runs a hook command with variable substitution.
