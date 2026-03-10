@@ -78,12 +78,21 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 				}
 			}
 
+			// Build task status map for each workspace.
+			taskStatusMap := make(map[string]string)
+			if app != nil {
+				for _, ws := range workspaces {
+					taskStatusMap[ws.ID] = resolveTaskStatus(app.store, ws.RepoRoot, ws.ID)
+				}
+			}
+
 			if *jsonFlag {
 				type jsonWS struct {
 					ID       string `json:"id"`
 					Status   string `json:"status"`
 					Branch   string `json:"branch"`
 					RepoRoot string `json:"repo_root,omitempty"`
+					Task     string `json:"task,omitempty"`
 					Diff     struct {
 						Added   int `json:"added"`
 						Removed int `json:"removed"`
@@ -103,6 +112,7 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 						Status: ws.Status,
 						Branch: ws.Branch,
 						Age:    cli.FormatAgeFromString(ws.CreatedAt),
+						Task:   taskStatusMap[ws.ID],
 					}
 					if showRepoColumn {
 						item.RepoRoot = ws.RepoRoot
@@ -130,6 +140,7 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 			columns := []cli.Column{
 				{Header: "ID", Width: 14},
 				{Header: "STATUS", Width: 10},
+				{Header: "TASK", Width: 12},
 				{Header: "HEALTH", Width: 8},
 				{Header: "ACTIVITY", Width: 10},
 				{Header: "DRIFT", Width: 6},
@@ -212,11 +223,18 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 					agentStr = ws.AgentRuntime
 				}
 
+				// Task.
+				taskStr := "-"
+				if ts := taskStatusMap[ws.ID]; ts != "" {
+					taskStr = ts
+				}
+
 				age := cli.FormatAgeFromString(ws.CreatedAt)
 
 				row := []string{
 					ws.ID,
 					statusStr,
+					taskStr,
 					healthStr,
 					activityStr,
 					driftStr,
@@ -253,6 +271,37 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 	cmd.Flags().BoolVar(&allFlag, "all", false, "show workspaces across all repos")
 
 	return cmd
+}
+
+// resolveTaskStatus queries the store for the latest dispatch status of a workspace
+// and returns a display string like "d-0001 ▶" (running), "d-0001 ✓" (completed),
+// "d-0001 ✗" (failed), or "d-0001 ◌" (dispatched/waiting).
+func resolveTaskStatus(s *store.SQLiteStore, repoRoot, wsID string) string {
+	disp, err := s.LatestDispatch(repoRoot, wsID)
+	if err != nil || disp == nil {
+		return ""
+	}
+	dispID, _ := disp.Data["dispatch_id"].(string)
+	if dispID == "" {
+		return ""
+	}
+
+	evt, err := s.LatestTaskEvent(repoRoot, wsID, dispID)
+	if err != nil || evt == nil {
+		// Dispatch exists but no follow-up event yet.
+		return dispID + " ◌"
+	}
+
+	switch evt.Kind {
+	case store.EventTaskStarted:
+		return dispID + " ▶"
+	case store.EventTaskCompleted:
+		return dispID + " ✓"
+	case store.EventTaskFailed:
+		return dispID + " ✗"
+	default:
+		return dispID + " ◌"
+	}
 }
 
 // getDiffCounts returns added/removed line counts between base and head branches.
