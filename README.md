@@ -10,10 +10,10 @@ $ amux spawn "fix billing" --id billing
 $ amux spawn "migrate tests" --id tests
 
 $ amux ls
-ID        STATUS  BASE    BRANCH          DIFF       TREE    AGE
-auth      READY   main    amux/auth       +142/-38   ~3      12m
-billing   READY   main    amux/billing    +67/-12    clean   45m
-tests     READY   main    amux/tests      +89/-204   ~1      2h
+ID        STATUS   HEALTH   ACTIVITY   DRIFT   DIFF       TREE    AGENT    AGE
+auth      READY    pass     4m         0       +142/-38   ~3      claude   12m
+billing   READY    fail     15m        +3      +67/-12    clean   claude   45m
+tests     READY    pass     2h         +12     +89/-204   ~1      —        2h
 
 $ amux land auth
 Landed workspace auth
@@ -29,7 +29,7 @@ Landed workspace auth
 | | git worktree | amux |
 |---|---|---|
 | Create isolated workspace | `git worktree add` | `amux spawn` |
-| See what's active | `git worktree list` (no diff stats) | `amux ls` (diff stats, tree status, age) |
+| See what's active | `git worktree list` (no diff stats) | `amux ls` (health, activity, drift, diff, tree, agent) |
 | Review changes | manual `git diff` per worktree | `amux diff`, `amux preview --diff` |
 | Merge safely | manual rebase + merge + cleanup | `amux land` (rebase, hooks, merge, cleanup) |
 | Block bad merges | nothing built-in | pre-land hooks, protected branches |
