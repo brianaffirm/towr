@@ -133,6 +133,7 @@ func run() error {
 		newOverlapCmd(initApp, &jsonFlag),
 		newDispatchCmd(initApp, &jsonFlag),
 		newWaitCmd(initApp, &jsonFlag),
+		newReportCmd(initApp, &jsonFlag),
 	)
 
 	// If no subcommand was provided, launch the TUI dashboard.
