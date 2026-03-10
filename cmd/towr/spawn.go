@@ -165,7 +165,10 @@ func newSpawnCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Com
 
 			// Discover hooks: .towr-hooks.toml in repo tree overrides config.
 			targetPath := config.InferTargetPath(app.repoRoot)
-			hooks := config.DiscoverHooks(app.repoRoot, targetPath, app.cfg.Hooks)
+			hooks, hooksErr := config.DiscoverHooks(app.repoRoot, targetPath, app.cfg.Hooks)
+			if hooksErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %v\n", hooksErr)
+			}
 
 			// Run post-create hooks if configured and not disabled.
 			if !noHooksFlag && hooks.PostCreate != "" {

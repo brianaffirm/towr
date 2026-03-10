@@ -2,8 +2,10 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -21,9 +23,9 @@ type HooksFile struct {
 //  1. .towr-hooks.toml nearest to targetPath
 //  2. .towr-hooks.toml at repo root
 //  3. Existing config hooks (passed as fallback)
-func DiscoverHooks(repoRoot, targetPath string, fallback HooksConfig) HooksConfig {
+func DiscoverHooks(repoRoot, targetPath string, fallback HooksConfig) (HooksConfig, error) {
 	if targetPath == "" || repoRoot == "" {
-		return fallback
+		return fallback, nil
 	}
 
 	// Collect hooks files from repo root down to target path.
@@ -32,9 +34,13 @@ func DiscoverHooks(repoRoot, targetPath string, fallback HooksConfig) HooksConfi
 
 	current := targetPath
 	for {
-		hf, err := loadHooksFile(filepath.Join(current, ".towr-hooks.toml"))
+		hooksPath := filepath.Join(current, ".towr-hooks.toml")
+		hf, err := loadHooksFile(hooksPath)
 		if err == nil {
 			hooksFiles = append(hooksFiles, hf.Hooks)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			// File exists but can't be read or parsed — surface the error.
+			return fallback, fmt.Errorf("invalid hooks file %s: %w", hooksPath, err)
 		}
 
 		if current == repoRoot {
@@ -48,7 +54,7 @@ func DiscoverHooks(repoRoot, targetPath string, fallback HooksConfig) HooksConfi
 	}
 
 	if len(hooksFiles) == 0 {
-		return fallback
+		return fallback, nil
 	}
 
 	// Merge: start from fallback, apply repo root (last in list), then more specific.
@@ -67,7 +73,7 @@ func DiscoverHooks(repoRoot, targetPath string, fallback HooksConfig) HooksConfi
 		}
 	}
 
-	return result
+	return result, nil
 }
 
 // InferTargetPath determines the workspace target path from cwd relative to repoRoot.
@@ -78,7 +84,7 @@ func InferTargetPath(repoRoot string) string {
 		return repoRoot
 	}
 	rel, err := filepath.Rel(repoRoot, cwd)
-	if err != nil || rel == "." || len(rel) > 0 && rel[0] == '.' {
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
 		return repoRoot
 	}
 	return cwd
