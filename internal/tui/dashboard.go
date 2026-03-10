@@ -144,6 +144,26 @@ func loadRepoWorkspaces(repoRoot, storePath string) ([]WorkspaceRow, error) {
 		return nil, err
 	}
 
+	// Lightweight reconciliation: detect STALE, MERGED, ORPHANED.
+	staleThreshold := 7 * 24 * time.Hour
+	for _, ws := range workspaces {
+		result := workspace.ReconcileWorkspace(ws, staleThreshold)
+		if result != nil {
+			ws.Status = string(result.To)
+			_ = s.SaveWorkspace(ws)
+			_ = s.EmitEvent(store.Event{
+				Kind:        store.EventWorkspaceAutoTransition,
+				WorkspaceID: ws.ID,
+				RepoRoot:    ws.RepoRoot,
+				Data: map[string]interface{}{
+					"from":   string(result.From),
+					"to":     string(result.To),
+					"reason": result.Reason,
+				},
+			})
+		}
+	}
+
 	var rows []WorkspaceRow
 	for _, ws := range workspaces {
 		health := s.LastHookResult(ws.RepoRoot, ws.ID)

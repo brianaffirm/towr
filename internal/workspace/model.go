@@ -17,13 +17,15 @@ const (
 	StatusArchived   WorkspaceStatus = "ARCHIVED"
 	StatusBlocked    WorkspaceStatus = "BLOCKED"
 	StatusOrphaned   WorkspaceStatus = "ORPHANED"
+	StatusStale      WorkspaceStatus = "STALE"
+	StatusMerged     WorkspaceStatus = "MERGED"
 )
 
 // ValidStatuses contains all valid workspace statuses.
 var ValidStatuses = []WorkspaceStatus{
 	StatusCreating, StatusReady, StatusRunning, StatusPaused, StatusIdle,
 	StatusValidating, StatusLanding, StatusLanded, StatusArchived,
-	StatusBlocked, StatusOrphaned,
+	StatusBlocked, StatusOrphaned, StatusStale, StatusMerged,
 }
 
 // IsValid returns true if the status is a recognized value.

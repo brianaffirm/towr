@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/brianaffirm/towr/internal/cli"
 	"github.com/brianaffirm/towr/internal/config"
@@ -45,6 +46,26 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 				workspaces, err = app.store.ListWorkspaces(app.repoRoot, store.ListFilter{})
 				if err != nil {
 					return fmt.Errorf("list workspaces: %w", err)
+				}
+
+				// Lightweight reconciliation: detect STALE, MERGED, ORPHANED.
+				staleThreshold := 7 * 24 * time.Hour
+				for _, ws := range workspaces {
+					result := workspace.ReconcileWorkspace(ws, staleThreshold)
+					if result != nil {
+						ws.Status = string(result.To)
+						_ = app.store.SaveWorkspace(ws)
+						_ = app.store.EmitEvent(store.Event{
+							Kind:        store.EventWorkspaceAutoTransition,
+							WorkspaceID: ws.ID,
+							RepoRoot:    ws.RepoRoot,
+							Data: map[string]interface{}{
+								"from":   string(result.From),
+								"to":     string(result.To),
+								"reason": result.Reason,
+							},
+						})
+					}
 				}
 			}
 
