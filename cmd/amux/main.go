@@ -130,6 +130,7 @@ func run() error {
 		newTUICmd(initApp),
 		newShellHookCmd(),
 		newNudgeCmd(),
+		newOverlapCmd(initApp, &jsonFlag),
 	)
 
 	// If no subcommand was provided, launch the TUI dashboard.
