@@ -19,6 +19,10 @@ import (
 type WorkspaceRow struct {
 	ID           string
 	Status       string
+	Health       string // "pass", "fail", ""
+	Activity     string // time since last event
+	Drift        int    // commits behind base
+	Agent        string // runtime name
 	Branch       string
 	Added        int
 	Removed      int
@@ -142,7 +146,8 @@ func loadRepoWorkspaces(repoRoot, storePath string) ([]WorkspaceRow, error) {
 
 	var rows []WorkspaceRow
 	for _, ws := range workspaces {
-		rows = append(rows, buildWorkspaceRow(ws))
+		health := s.LastHookResult(ws.RepoRoot, ws.ID)
+		rows = append(rows, buildWorkspaceRow(ws, health))
 	}
 	return rows, nil
 }
@@ -155,16 +160,21 @@ func loadAllWorkspaces(reposDir string) ([]WorkspaceRow, error) {
 
 	var rows []WorkspaceRow
 	for _, ws := range workspaces {
-		rows = append(rows, buildWorkspaceRow(ws))
+		// Health not available in all-repos mode (no single store to query).
+		rows = append(rows, buildWorkspaceRow(ws, ""))
 	}
 	return rows, nil
 }
 
-func buildWorkspaceRow(ws *store.Workspace) WorkspaceRow {
+func buildWorkspaceRow(ws *store.Workspace, health string) WorkspaceRow {
 	added, removed := getDiffCounts(ws.RepoRoot, ws.BaseBranch, ws.Branch)
 	row := WorkspaceRow{
 		ID:           ws.ID,
 		Status:       ws.Status,
+		Health:       health,
+		Activity:     formatAge(ws.LastActivity),
+		Drift:        workspace.DriftCount(ws.RepoRoot, ws.BaseBranch, ws.Branch),
+		Agent:        ws.AgentRuntime,
 		Branch:       ws.Branch,
 		Added:        added,
 		Removed:      removed,
@@ -654,17 +664,18 @@ func (m DashboardModel) renderDashboard() string {
 		b.WriteString("\n")
 	} else {
 		sep := dimStyle.Render("│")
-		cols := []int{16, 12, 12, 10, 24, 12, 12, 5}
+		cols := []int{14, 10, 8, 8, 6, 10, 10, 8, 5}
 
 		// Column header.
 		headers := []string{
 			headerColStyle.Render("ID"),
-			headerColStyle.Render("REPO"),
 			headerColStyle.Render("STATUS"),
-			headerColStyle.Render("BASE"),
-			headerColStyle.Render("BRANCH"),
+			headerColStyle.Render("HEALTH"),
+			headerColStyle.Render("ACTIVITY"),
+			headerColStyle.Render("DRIFT"),
 			headerColStyle.Render("DIFF"),
 			headerColStyle.Render("TREE"),
+			headerColStyle.Render("AGENT"),
 			headerColStyle.Render("AGE"),
 		}
 		b.WriteString("  ")
@@ -699,28 +710,44 @@ func (m DashboardModel) renderDashboard() string {
 			if ws.Merged {
 				statusStr = mergedStyle.Render("merged")
 			}
-			baseStr := ws.BaseBranch
-			if baseStr == "" {
-				baseStr = "-"
+
+			// Health column.
+			healthStr := dimStyle.Render("—")
+			if ws.Health == "pass" {
+				healthStr = statusReady.Render("pass")
+			} else if ws.Health == "fail" {
+				healthStr = statusBlocked.Render("fail")
 			}
 
-			// Repo name or folder path for non-repo.
-			// Show ~ for $HOME, ~/subdir for paths under home, or basename.
-			repoStr := "-"
-			if ws.RepoRoot != "" {
-				repoStr = filepath.Base(ws.RepoRoot)
-			} else if ws.WorktreePath != "" {
-				repoStr = shortenPath(ws.WorktreePath)
+			// Activity column.
+			activityStr := ws.Activity
+			if activityStr == "" || activityStr == "-" {
+				activityStr = dimStyle.Render("—")
+			}
+
+			// Drift column.
+			driftStr := dimStyle.Render("0")
+			if ws.Drift > 0 && ws.Drift <= 5 {
+				driftStr = statusRunning.Render(fmt.Sprintf("+%d", ws.Drift))
+			} else if ws.Drift > 5 {
+				driftStr = statusBlocked.Render(fmt.Sprintf("+%d", ws.Drift))
+			}
+
+			// Agent column.
+			agentStr := dimStyle.Render("—")
+			if ws.Agent != "" {
+				agentStr = ws.Agent
 			}
 
 			cells := []string{
 				ws.ID,
-				truncate(repoStr, 12),
 				statusStr,
-				truncate(baseStr, 10),
-				truncate(ws.Branch, 24),
+				healthStr,
+				activityStr,
+				driftStr,
 				diffStr,
 				treeStr,
+				truncate(agentStr, 8),
 				ws.Age,
 			}
 
