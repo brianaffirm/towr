@@ -31,18 +31,26 @@ func newSpawnCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Com
 	)
 
 	cmd := &cobra.Command{
-		Use:     "spawn <task>",
+		Use:     "spawn [task]",
 		Aliases: []string{"s"},
 		Short:   "Create a new workspace for a task",
-		Long:    "Create a git worktree workspace, optionally launch an agent.",
-		Args:    cobra.ExactArgs(1),
+		Long:    "Create a git worktree workspace, optionally launch an agent.\nWith no arguments, auto-generates a workspace ID.",
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			task := args[0]
+			var task string
+			if len(args) > 0 {
+				task = args[0]
+			}
 
 			// Derive workspace ID.
 			wsID := idFlag
 			if wsID == "" {
-				wsID = slugify(task)
+				if task != "" {
+					wsID = slugify(task)
+				} else {
+					wsID = nextAutoID()
+					task = wsID
+				}
 			}
 
 			// Non-repo mode: if --path points to a non-repo dir, or not in a repo at all.
@@ -268,6 +276,27 @@ func spawnNonRepo(cmd *cobra.Command, task, wsID, dirPath string, jsonFlag *bool
 		fmt.Printf("  Note:   tmux not available — use: cd %s\n", absPath)
 	}
 	return nil
+}
+
+// nextAutoID generates the next auto-increment workspace ID (ws-0001, ws-0002, ...).
+// Scans ~/.amux/repos/*/state.db for existing ws-NNNN IDs to find the next counter.
+func nextAutoID() string {
+	reposDir := filepath.Join(config.AmuxHome(), "repos")
+	all, err := store.ListAllWorkspaces(reposDir)
+	if err != nil {
+		return "ws-0001"
+	}
+	maxN := 0
+	for _, ws := range all {
+		if strings.HasPrefix(ws.ID, "ws-") {
+			numStr := strings.TrimPrefix(ws.ID, "ws-")
+			var n int
+			if _, err := fmt.Sscanf(numStr, "%d", &n); err == nil && n > maxN {
+				maxN = n
+			}
+		}
+	}
+	return fmt.Sprintf("ws-%04d", maxN+1)
 }
 
 // slugify converts a task description into a short workspace ID.
