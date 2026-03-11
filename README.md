@@ -1,8 +1,48 @@
 # towr
 
-You're running 4 things at once — an auth refactor, a billing fix, a test migration, and an AI agent experimenting with a new API client. Each one needs its own branch, its own working directory, and its own terminal context. You're juggling `git stash`, tab names, and "wait, which branch am I on?" Every time you land one, you hold your breath.
+The operations layer for parallel AI-assisted development. Isolate, coordinate, validate, and land code changes across any number of agents and runtimes.
 
-towr gives you isolated git worktrees per task, tracks them in one place, and lands them safely.
+```
+Claude Code, Cursor, Aider, Agent Teams, shell scripts, CI bots
+                        |
+                    towr (this tool)
+            isolate | coordinate | validate | audit | land
+                        |
+                      git (source of truth)
+```
+
+**towr is NOT** an agent, a terminal emulator, or a Claude Code replacement. It's the layer beneath all of them — managing workspaces, coordinating work, enforcing validation gates, and keeping an audit trail.
+
+## The problem
+
+Running parallel AI coding agents produces code that needs to be safely isolated, validated, merged, and cleaned up. No tool owns this lifecycle. You end up with stale branches, orphaned worktrees, merge conflicts from file overlap, and no record of which agent changed what.
+
+towr gives you isolated git worktrees per task, tracks them in one place, coordinates work across sessions, and lands them safely.
+
+## How towr fits with Claude Code Agent Teams
+
+Agent Teams coordinates work **within** a single project scope. towr coordinates work **across** project scopes. They stack:
+
+```
+Master Claude (you)
+  └── towr dispatch auth "build auth with agent team"
+        └── Claude Code → Agent Teams (3 teammates inside this workspace)
+  └── towr dispatch billing "implement billing"
+        └── Claude Code → Agent Teams (2 teammates inside this workspace)
+  └── towr dispatch docs "update API docs"
+        └── Claude Code (solo, no team needed)
+```
+
+| | Agent Teams | towr |
+|---|---|---|
+| **Scope** | Fast parallel work within one workspace | Cross-workspace lifecycle management |
+| **Persistence** | Ephemeral — no resume, no memory | Event-sourced — full audit trail |
+| **Runtimes** | Claude Code only | Any agent runtime |
+| **Merge pipeline** | None — you merge manually | Validated landing with hooks |
+| **Permission visibility** | Children block silently | Surfaces dialogs, selective approval |
+| **State after crash** | Lost | `towr doctor` recovers in 60s |
+
+Use Agent Teams for execution speed. Use towr for the lifecycle around it.
 
 ```
 $ towr spawn "refactor auth" --id auth
@@ -116,27 +156,31 @@ Protected branches (`main`, `master`, `develop`, `release/*`) block local merge 
 
 ## Working with AI agents
 
-towr works with Claude Code, Cursor, Aider, or anything that runs in a terminal. Each agent gets its own isolated worktree — no branch conflicts, no stash juggling.
+towr works with Claude Code, Cursor, Aider, or anything that runs in a terminal. Each agent gets its own isolated worktree — no branch conflicts, no stash juggling, no "which agent is editing which file?"
 
 ```bash
-# Give an agent its own workspace
-towr spawn "implement caching layer" --id cache --agent claude-code
-
-# While it works, start another task yourself
+# Give agents their own workspaces
+towr spawn "implement caching layer" --id cache
 towr spawn "update API docs" --id docs
+towr spawn "fix flaky tests" --id tests
 
-# Check on both
+# One dashboard for everything
 towr ls
+# ID      STATUS    TASK          DIFF        TREE    AGE
+# cache   RUNNING   d-0001 ▶    +142/-38    ~3      12m
+# docs    IDLE      d-0001 ✓    +67/-12     clean   45m
+# tests   RUNNING   d-0001 ▶    +89/-204    ~1      2h
 
-# Review the agent's work before landing
+# Check for file overlaps before merging (catch conflicts early)
+towr overlap
+
+# Review and land
 towr diff cache
-towr land cache --dry-run    # preview what would merge
-
-# Land it if it looks good
-towr land cache
+towr land cache              # rebase, validate hooks, merge, clean up
+towr land docs --pr          # push + print PR URL
 ```
 
-The `--agent` flag tags the workspace with the runtime identifier, tracked in the audit log. `towr preview --diff` pushes diffs into a tmux split pane so agents can see changes without switching context.
+Every action is recorded in an immutable audit log — which agent changed what, when, and why. `towr log <id>` shows the full history.
 
 ## Dispatch orchestration
 
