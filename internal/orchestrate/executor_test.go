@@ -77,6 +77,10 @@ func (m *mockRuntime) AutoCommit(wsID string) error {
 	return nil
 }
 
+func (m *mockRuntime) LandPR(wsID string) error {
+	return nil
+}
+
 func (m *mockRuntime) EmitEvent(event store.Event) error {
 	return nil
 }

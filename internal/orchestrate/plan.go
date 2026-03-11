@@ -26,6 +26,7 @@ type Settings struct {
 	AutoApprove  bool   `yaml:"auto_approve"`
 	MaxRetries   int    `yaml:"max_retries"`
 	PollInterval string `yaml:"poll_interval"` // e.g. "10s"
+	LandPR       bool   `yaml:"land_pr"`       // auto-land each task as a PR when complete
 }
 
 // LoadPlan reads and parses a YAML plan file from the given path.

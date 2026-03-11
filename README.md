@@ -260,6 +260,7 @@ tasks:
 settings:
   auto_approve: true
   max_retries: 2
+  land_pr: true       # auto-push + create PR on task completion (workspace stays alive)
 ```
 
 ```bash

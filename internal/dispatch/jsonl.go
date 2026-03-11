@@ -169,9 +169,9 @@ func findLastLine(text string) string {
 // State logic:
 //   - "last-prompt" type → PaneIdle (session waiting for input)
 //   - file mtime > 120s ago → PaneIdle (stale)
-//   - "progress" or "user" type AND mtime < 10s → PaneWorking
-//   - "assistant" type AND mtime < 10s → PaneWorking (may still be generating)
-//   - "assistant" type AND mtime > 10s → PaneIdle (finished responding)
+//   - "progress" or "user" type AND mtime < 30s → PaneWorking
+//   - "assistant" type AND mtime < 30s → PaneWorking (may still be generating)
+//   - "assistant" type AND mtime > 30s → PaneIdle (finished responding)
 //   - no JSONL file → PaneEmpty
 func DetectClaudeActivity(worktreePath string) (PaneState, string, error) {
 	jsonlPath, err := FindLatestJSONL(worktreePath)
@@ -207,24 +207,24 @@ func DetectClaudeActivity(worktreePath string) (PaneState, string, error) {
 	// Recent activity — determine based on entry type.
 	switch entry.Type {
 	case "progress", "user":
-		if age < 10*time.Second {
+		if age < 30*time.Second {
 			return PaneWorking, summary, nil
 		}
 		return PaneIdle, summary, nil
 	case "assistant":
-		if age < 10*time.Second {
+		if age < 30*time.Second {
 			return PaneWorking, summary, nil
 		}
 		return PaneIdle, summary, nil
 	case "system", "file-history-snapshot":
 		// System events shortly after assistant response — likely idle.
-		if age < 10*time.Second {
+		if age < 30*time.Second {
 			return PaneWorking, summary, nil
 		}
 		return PaneIdle, summary, nil
 	default:
 		// Unknown type — treat as working if recent, idle otherwise.
-		if age < 10*time.Second {
+		if age < 30*time.Second {
 			return PaneWorking, summary, nil
 		}
 		return PaneIdle, summary, nil
