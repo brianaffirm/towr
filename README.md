@@ -282,7 +282,35 @@ When a task's dependencies complete, towr automatically:
 - **Auto-commits** any uncommitted files when a task finishes
 - **Retries** failed tasks up to `max_retries` before marking blocked
 
-The overnight workflow: `towr orchestrate plan.yaml`, go to sleep, check results in the morning.
+### PR monitoring and auto-fix
+
+`towr watch --react` monitors open PRs on `towr/*` branches and auto-reacts to CI failures and review feedback:
+
+```bash
+# Run from anywhere — monitors all repos
+towr watch --react --all --auto-approve
+
+# [19:35:00] ✗ PR #42 (towr/auth): CI failed — dispatching fix
+# [19:38:00] ✓ auth d-0002: completed (CI fix pushed)
+# [19:40:00] 💬 PR #42 (towr/auth): changes requested — dispatching fix
+# [19:43:00] ✓ auth d-0003: completed (review fixes pushed)
+# [19:45:00] ✓ PR #42 (towr/auth): approved + CI passing — ready to merge
+```
+
+The overnight workflow:
+
+```bash
+# Start the watcher (runs forever in its own tmux session)
+towr spawn "control plane" --id watcher --path /tmp/towr-watcher
+tmux send-keys -t towr/watcher:chat "towr watch --react --all --auto-approve" Enter
+
+# Orchestrate your work plan
+towr orchestrate plan.yaml
+# → tasks complete → PRs created → orchestrate exits
+# → reviewer comments next morning → watch auto-dispatches fixes
+# → CI fails → watch auto-dispatches fixes
+# → approved + green → watch notifies
+```
 
 | Command | Description |
 |---------|-------------|
@@ -290,8 +318,8 @@ The overnight workflow: `towr orchestrate plan.yaml`, go to sleep, check results
 | `towr dispatch <id> "prompt"` | Send task to workspace (interactive default) |
 | `towr dispatch <id> "prompt" --headless` | Autonomous mode via `claude -p` |
 | `towr dispatch <id> "prompt" --wait` | Block until task completes or needs approval |
-| `towr watch` | Monitor all workspaces, react to state changes |
-| `towr watch --auto-approve` | Same, but auto-approve permission dialogs |
+| `towr watch --react --all` | Monitor all workspaces + PRs, auto-react to feedback |
+| `towr watch --auto-approve` | Auto-approve permission dialogs |
 | `towr send <id> "message"` | Send follow-up to interactive session |
 | `towr send <id> --approve` | Approve a permission dialog |
 | `towr wait <id>` | Wait for current task (`--any`/`--all` for multi-workspace) |
