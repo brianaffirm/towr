@@ -55,14 +55,26 @@ func newDispatchCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.
 				return fmt.Errorf("check latest dispatch: %w", err)
 			}
 			if latestDisp != nil {
-				dispID, _ := latestDisp.Data["dispatch_id"].(string)
-				if dispID != "" {
-					latestEvt, err := app.store.LatestTaskEvent(app.repoRoot, wsID, dispID)
-					if err != nil {
-						return fmt.Errorf("check latest task event: %w", err)
+				// If the dispatch event is older than the workspace creation, ignore it.
+				// This handles the case where a workspace was cleaned up and re-created
+				// with the same name — old events are stale.
+				stale := false
+				if sw.CreatedAt != "" {
+					wsCreatedAt, parseErr := time.Parse(time.RFC3339, sw.CreatedAt)
+					if parseErr == nil && latestDisp.Timestamp.Before(wsCreatedAt) {
+						stale = true
 					}
-					if latestEvt != nil && latestEvt.Kind != store.EventTaskCompleted && latestEvt.Kind != store.EventTaskFailed {
-						return fmt.Errorf("workspace %q has active dispatch %s (status: %s)", wsID, dispID, latestEvt.Kind)
+				}
+				if !stale {
+					dispID, _ := latestDisp.Data["dispatch_id"].(string)
+					if dispID != "" {
+						latestEvt, err := app.store.LatestTaskEvent(app.repoRoot, wsID, dispID)
+						if err != nil {
+							return fmt.Errorf("check latest task event: %w", err)
+						}
+						if latestEvt != nil && latestEvt.Kind != store.EventTaskCompleted && latestEvt.Kind != store.EventTaskFailed {
+							return fmt.Errorf("workspace %q has active dispatch %s (status: %s)", wsID, dispID, latestEvt.Kind)
+						}
 					}
 				}
 			}
