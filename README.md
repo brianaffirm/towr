@@ -239,10 +239,50 @@ towr watch --auto-approve
 # [19:31:25] All workspaces idle.
 ```
 
-The overnight workflow: dispatch tasks, run `towr watch --auto-approve`, go to sleep. Morning: check the output.
+### Declarative task plans
+
+For multi-step projects with dependencies, define a YAML plan and let towr execute it end-to-end:
+
+```yaml
+# plan.yaml
+name: "build todo app"
+tasks:
+  - id: models
+    prompt: "Create todo/store.go with Todo struct and CRUD methods"
+  - id: tests
+    prompt: "Create todo/store_test.go with table-driven tests"
+  - id: cli
+    prompt: "Create cobra CLI with add/list/complete/delete commands"
+    depends_on: [models]
+  - id: integration
+    prompt: "Run go test ./... and fix any failures"
+    depends_on: [models, tests, cli]
+settings:
+  auto_approve: true
+  max_retries: 2
+```
+
+```bash
+towr orchestrate plan.yaml
+# [19:30:00] Orchestrating "build todo app" (4 tasks, auto-approve: on)
+# [19:30:02] ▶ models: dispatched
+# [19:30:02] ▶ tests: dispatched (no deps)
+# [19:30:30] ✓ models: completed — "Created todo/store.go..."
+# [19:30:30] ▶ cli: dispatched (deps: models ✓)
+# [19:31:00] ✓ tests: completed
+# [19:31:15] ✓ cli: completed
+# [19:31:15] ▶ integration: dispatched (deps: models ✓, tests ✓, cli ✓)
+# [19:31:45] ✓ integration: completed — "All tests pass"
+# Plan "build todo app" completed: 4/4 tasks succeeded.
+```
+
+Completed task summaries are automatically injected as context into dependent prompts. Failed tasks retry up to `max_retries` before marking blocked.
+
+The overnight workflow: `towr orchestrate plan.yaml`, go to sleep, check results in the morning.
 
 | Command | Description |
 |---------|-------------|
+| `towr orchestrate <plan.yaml>` | Execute a declarative task plan with dependencies |
 | `towr dispatch <id> "prompt"` | Send task to workspace (interactive default) |
 | `towr dispatch <id> "prompt" --headless` | Autonomous mode via `claude -p` |
 | `towr dispatch <id> "prompt" --wait` | Block until task completes or needs approval |

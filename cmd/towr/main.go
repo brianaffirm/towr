@@ -137,6 +137,7 @@ func run() error {
 		newWatchCmd(initApp, &jsonFlag),
 		newReportCmd(initApp, &jsonFlag),
 		newPromoteCmd(initApp, &jsonFlag),
+		newOrchestrateCmd(initApp, &jsonFlag),
 	)
 
 	// If no subcommand was provided, launch the TUI dashboard.
