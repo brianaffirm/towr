@@ -41,6 +41,8 @@ type Runtime interface {
 	MergeDeps(wsID string, depIDs []string) error
 	// AutoCommit commits any uncommitted files in the workspace's worktree.
 	AutoCommit(wsID string) error
+	// LandPR pushes the workspace branch and creates a PR.
+	LandPR(wsID string) error
 	// EmitEvent records an event in the store.
 	EmitEvent(event store.Event) error
 }
@@ -312,6 +314,15 @@ func (e *Executor) checkTask(task *Task) {
 		// Task completed — auto-commit any uncommitted work.
 		if err := e.runtime.AutoCommit(task.ID); err != nil {
 			e.logger.Log("\u26a0 %s: auto-commit failed — %v", task.ID, err)
+		}
+		// Auto-land as PR if configured.
+		if e.plan.Settings.LandPR {
+			if err := e.runtime.LandPR(task.ID); err != nil {
+				e.logger.Log("\u2717 %s: land --pr failed — %v", task.ID, err)
+				e.states[task.ID] = TaskFailed
+				return
+			}
+			e.logger.Log("\u2713 %s: PR created", task.ID)
 		}
 		e.states[task.ID] = TaskCompleted
 		e.results[task.ID] = summary
