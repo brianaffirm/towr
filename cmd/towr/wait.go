@@ -8,6 +8,7 @@ import (
 
 	"github.com/brianaffirm/towr/internal/cli"
 	"github.com/brianaffirm/towr/internal/config"
+	"github.com/brianaffirm/towr/internal/dispatch"
 	"github.com/brianaffirm/towr/internal/store"
 	"github.com/brianaffirm/towr/internal/workspace"
 	"github.com/spf13/cobra"
@@ -68,6 +69,7 @@ func newWaitCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comm
 			type activeDispatch struct {
 				wsID       string
 				dispatchID string
+				mode       string // "interactive" or "headless"
 			}
 			var active []activeDispatch
 
@@ -83,6 +85,7 @@ func newWaitCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comm
 				if dispID == "" {
 					continue
 				}
+				mode, _ := latestDisp.Data["mode"].(string)
 				// Check if dispatch is still active.
 				latestEvt, err := app.store.LatestTaskEvent(app.repoRoot, ws.ID, dispID)
 				if err != nil {
@@ -91,7 +94,7 @@ func newWaitCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comm
 				if latestEvt != nil && (latestEvt.Kind == store.EventTaskCompleted || latestEvt.Kind == store.EventTaskFailed) {
 					continue
 				}
-				active = append(active, activeDispatch{wsID: ws.ID, dispatchID: dispID})
+				active = append(active, activeDispatch{wsID: ws.ID, dispatchID: dispID, mode: mode})
 			}
 
 			if len(active) == 0 {
@@ -109,14 +112,96 @@ func newWaitCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comm
 			}
 
 			completed := make(map[string]map[string]interface{})
-			ticker := time.NewTicker(2 * time.Second)
+			// Track whether we've seen interactive dispatches enter a working state.
+			sawWorking := make(map[string]bool)
+			ticker := time.NewTicker(3 * time.Second)
 			defer ticker.Stop()
+
+			// Give dispatches a moment to start processing.
+			time.Sleep(3 * time.Second)
 
 			for {
 				for _, ad := range active {
 					if _, done := completed[ad.wsID]; done {
 						continue
 					}
+
+					// For interactive dispatches, poll CapturePane.
+					if ad.mode == "interactive" {
+						captured, captErr := app.term.CapturePane(ad.wsID, 200)
+						if captErr != nil {
+							continue
+						}
+						state := dispatch.DetectPaneState(captured)
+						if state == dispatch.PaneWorking || state == dispatch.PaneBlocked {
+							sawWorking[ad.wsID] = true
+						}
+						if state == dispatch.PaneIdle && sawWorking[ad.wsID] {
+							response := dispatch.ExtractLastResponse(captured)
+							commsDir, _ := dispatch.EnsureCommsDir(ad.wsID)
+							if commsDir != "" {
+								_ = os.WriteFile(commsDir+"/result.txt", []byte(response), 0o644)
+							}
+							summary := truncate(response, 200)
+							_ = app.store.EmitEvent(store.Event{
+								ID:          fmt.Sprintf("wait-%s-%d", ad.wsID, time.Now().UnixNano()),
+								Kind:        store.EventTaskCompleted,
+								WorkspaceID: ad.wsID,
+								RepoRoot:    app.repoRoot,
+								Timestamp:   time.Now().UTC(),
+								Data: map[string]interface{}{
+									"dispatch_id": ad.dispatchID,
+									"summary":     summary,
+									"mode":        "interactive",
+								},
+							})
+							sw, _ := app.store.GetWorkspace(app.repoRoot, ad.wsID)
+							if sw != nil {
+								sw.Status = string(workspace.StatusIdle)
+								sw.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+								_ = app.store.SaveWorkspace(sw)
+							}
+							result := map[string]interface{}{
+								"workspace_id": ad.wsID,
+								"dispatch_id":  ad.dispatchID,
+								"status":       store.EventTaskCompleted,
+								"summary":      summary,
+							}
+							completed[ad.wsID] = result
+							if !*jsonFlag {
+								fmt.Fprintf(os.Stderr, "✓ %s %s: %s\n", ad.wsID, ad.dispatchID, summary)
+							}
+							if anyFlag {
+								if *jsonFlag {
+									return cli.PrintJSON(result)
+								}
+								return nil
+							}
+						}
+						if state == dispatch.PaneBlocked && sawWorking[ad.wsID] {
+							dialogCtx := dispatch.ExtractDialogContext(captured)
+							result := map[string]interface{}{
+								"workspace_id": ad.wsID,
+								"dispatch_id":  ad.dispatchID,
+								"status":       "blocked",
+								"dialog":       dialogCtx,
+								"hint":         "towr send " + ad.wsID + " --approve",
+							}
+							completed[ad.wsID] = result
+							if !*jsonFlag {
+								fmt.Fprintf(os.Stderr, "⚠ %s %s: %s\n  Run: towr send %s --approve\n", ad.wsID, ad.dispatchID, dialogCtx, ad.wsID)
+							}
+							if anyFlag {
+								if *jsonFlag {
+									return cli.PrintJSON(result)
+								}
+								return nil
+							}
+						}
+						continue
+					}
+
+					// Headless mode: poll events.
 					evt, err := app.store.LatestTaskEvent(app.repoRoot, ad.wsID, ad.dispatchID)
 					if err != nil || evt == nil {
 						checkHeartbeat(ad.wsID)
