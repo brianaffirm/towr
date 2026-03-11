@@ -4,12 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/brianaffirm/towr/internal/config"
 	"github.com/brianaffirm/towr/internal/dispatch"
 	"github.com/brianaffirm/towr/internal/store"
+	"github.com/brianaffirm/towr/internal/terminal"
 	"github.com/brianaffirm/towr/internal/workspace"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -17,8 +23,10 @@ import (
 
 func newWatchCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Command {
 	var (
-		intervalFlag   time.Duration
+		intervalFlag    time.Duration
 		autoApproveFlag bool
+		allFlag         bool
+		reactFlag       bool
 	)
 
 	cmd := &cobra.Command{
@@ -26,45 +34,136 @@ func newWatchCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Com
 		Short: "Monitor all workspaces and react to state changes",
 		Long:  "Continuously poll all active workspaces, detect state transitions (idle, blocked, completed), and react automatically. Replaces the manual towr wait + towr send --approve loop.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app, err := initApp()
-			if err != nil {
-				return err
+			app, appErr := initApp()
+
+			if appErr != nil || allFlag {
+				// All-repos mode: no single app context needed.
+				return runWatchAllRepos(intervalFlag, autoApproveFlag, reactFlag, jsonFlag)
 			}
 
-			return runWatch(app, intervalFlag, autoApproveFlag, jsonFlag)
+			return runWatch(app, intervalFlag, autoApproveFlag, reactFlag, jsonFlag)
 		},
 	}
 
 	cmd.Flags().DurationVar(&intervalFlag, "interval", 10*time.Second, "poll interval (e.g. 5s, 30s)")
 	cmd.Flags().BoolVar(&autoApproveFlag, "auto-approve", false, "automatically approve permission dialogs")
+	cmd.Flags().BoolVar(&allFlag, "all", false, "monitor workspaces across all repos")
+	cmd.Flags().BoolVar(&reactFlag, "react", false, "monitor PRs and auto-react to CI failures and review feedback")
 
 	return cmd
 }
 
 // watchState tracks per-workspace monitoring state.
 type watchState struct {
-	prevState  dispatch.PaneState
-	sawWorking bool
-	dispatchID string
-	idleSince  time.Time // when workspace first entered idle (for stale-idle warning)
-	warnedIdle bool      // whether we already warned about prolonged idle
-	finalStatus string   // for exit summary: "completed", "working", "blocked", etc.
+	prevState   dispatch.PaneState
+	sawWorking  bool
+	dispatchID  string
+	idleSince   time.Time // when workspace first entered idle (for stale-idle warning)
+	warnedIdle  bool      // whether we already warned about prolonged idle
+	finalStatus string    // for exit summary: "completed", "working", "blocked", etc.
 }
 
-func runWatch(app *appContext, interval time.Duration, autoApprove bool, jsonFlag *bool) error {
-	// Set up signal handling for clean shutdown.
+// prState tracks per-PR monitoring state to avoid re-triggering reactions.
+type prState struct {
+	number        int
+	lastReview    string // "APPROVED", "CHANGES_REQUESTED", ""
+	lastCI        string // "SUCCESS", "FAILURE", "PENDING"
+	reactedReview bool   // already reacted to this review state
+	reactedCI     bool   // already reacted to this CI state
+	workspaceID   string // mapped from branch name
+	ciRetries     int    // count of CI fix re-dispatches
+	reviewRetries int    // count of review fix re-dispatches
+}
+
+const maxReactRetries = 3
+
+// repoStoreCache caches open stores per repo root for all-repos mode.
+type repoStoreCache struct {
+	mu     sync.Mutex
+	stores map[string]*store.SQLiteStore
+	terms  map[string]terminal.Backend
+}
+
+func newRepoStoreCache() *repoStoreCache {
+	return &repoStoreCache{
+		stores: make(map[string]*store.SQLiteStore),
+		terms:  make(map[string]terminal.Backend),
+	}
+}
+
+func (c *repoStoreCache) getStore(repoRoot string) (*store.SQLiteStore, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if s, ok := c.stores[repoRoot]; ok {
+		return s, nil
+	}
+
+	var dbPath string
+	if repoRoot == "" {
+		dbPath = filepath.Join(config.TowrHome(), "global-state.db")
+	} else {
+		repoState := config.RepoStatePath(repoRoot)
+		dbPath = filepath.Join(repoState, "state.db")
+	}
+
+	s := store.NewSQLiteStore()
+	if err := s.Init(dbPath); err != nil {
+		return nil, fmt.Errorf("open store for %s: %w", repoRoot, err)
+	}
+	c.stores[repoRoot] = s
+	return s, nil
+}
+
+func (c *repoStoreCache) getTerm(_ string) terminal.Backend {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// All repos share the same tmux backend.
+	if t, ok := c.terms["default"]; ok {
+		return t
+	}
+
+	var term terminal.Backend
+	if _, err := exec.LookPath("tmux"); err != nil {
+		term = terminal.NewHeadlessBackend()
+	} else {
+		term = terminal.NewTmuxBackend("towr")
+	}
+	c.terms["default"] = term
+	return term
+}
+
+func (c *repoStoreCache) closeAll() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.stores {
+		_ = s.Close()
+	}
+}
+
+// ---------- Single-repo watch (existing behavior + react) ----------
+
+func runWatch(app *appContext, interval time.Duration, autoApprove, react bool, jsonFlag *bool) error {
+	if react {
+		if err := checkGHCLI(); err != nil {
+			return err
+		}
+	}
+
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	states := make(map[string]*watchState)
+	prStates := make(map[int]*prState)
 
-	// Print initial header.
 	now := time.Now()
 	workspaces := countActiveWorkspaces(app)
 	approveStr := "off"
 	if autoApprove {
 		approveStr = "on"
 	}
+
 	if *jsonFlag {
 		emitJSON(map[string]interface{}{
 			"time":         formatTime(now),
@@ -72,29 +171,151 @@ func runWatch(app *appContext, interval time.Duration, autoApprove bool, jsonFla
 			"workspaces":   workspaces,
 			"interval":     interval.String(),
 			"auto_approve": autoApprove,
+			"react":        react,
 		})
 	} else {
-		fmt.Printf("[%s] Watching %d workspaces (poll: %s, auto-approve: %s)\n",
-			formatTime(now), workspaces, interval, approveStr)
+		reactStr := ""
+		if react {
+			reactStr = ", react: on"
+		}
+		fmt.Printf("[%s] Watching %d workspaces (poll: %s, auto-approve: %s%s)\n",
+			formatTime(now), workspaces, interval, approveStr, reactStr)
 	}
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	// PR polling uses a longer interval (3x workspace polling).
+	var prTicker *time.Ticker
+	if react {
+		prInterval := interval * 3
+		if prInterval < 30*time.Second {
+			prInterval = 30 * time.Second
+		}
+		prTicker = time.NewTicker(prInterval)
+		defer prTicker.Stop()
+	}
+
 	for {
-		select {
-		case <-sigCh:
-			printSummary(app, states, jsonFlag)
-			return nil
-		case <-ticker.C:
-			pollWorkspaces(app, states, autoApprove, jsonFlag)
+		if prTicker != nil {
+			select {
+			case <-sigCh:
+				printSummary(app, states, jsonFlag)
+				return nil
+			case <-ticker.C:
+				pollWorkspaces(app, states, autoApprove, jsonFlag)
+			case <-prTicker.C:
+				pollPRsSingleRepo(app, prStates, states, jsonFlag)
+			}
+		} else {
+			select {
+			case <-sigCh:
+				printSummary(app, states, jsonFlag)
+				return nil
+			case <-ticker.C:
+				pollWorkspaces(app, states, autoApprove, jsonFlag)
+			}
 		}
 	}
 }
 
-func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove bool, jsonFlag *bool) {
-	// Get all workspaces — we care about RUNNING and IDLE with active dispatches.
-	allWS, err := app.store.ListWorkspaces(app.repoRoot, store.ListFilter{})
+// ---------- All-repos watch ----------
+
+func runWatchAllRepos(interval time.Duration, autoApprove, react bool, jsonFlag *bool) error {
+	if react {
+		if err := checkGHCLI(); err != nil {
+			return err
+		}
+	}
+
+	if err := config.EnsureTowrDirs(); err != nil {
+		return err
+	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	cache := newRepoStoreCache()
+	defer cache.closeAll()
+
+	states := make(map[string]*watchState)
+	prStates := make(map[int]*prState)
+
+	// Count active workspaces across all repos.
+	reposDir := filepath.Join(config.TowrHome(), "repos")
+	allWS, _ := store.ListAllWorkspaces(reposDir)
+	activeCount := 0
+	for _, ws := range allWS {
+		status := workspace.WorkspaceStatus(ws.Status)
+		if status == workspace.StatusRunning || status == workspace.StatusIdle {
+			activeCount++
+		}
+	}
+
+	now := time.Now()
+	approveStr := "off"
+	if autoApprove {
+		approveStr = "on"
+	}
+
+	if *jsonFlag {
+		emitJSON(map[string]interface{}{
+			"time":         formatTime(now),
+			"event":        "started",
+			"mode":         "all-repos",
+			"workspaces":   activeCount,
+			"interval":     interval.String(),
+			"auto_approve": autoApprove,
+			"react":        react,
+		})
+	} else {
+		reactStr := ""
+		if react {
+			reactStr = ", react: on"
+		}
+		fmt.Printf("[%s] Watching %d workspaces across all repos (poll: %s, auto-approve: %s%s)\n",
+			formatTime(now), activeCount, interval, approveStr, reactStr)
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	var prTicker *time.Ticker
+	if react {
+		prInterval := interval * 3
+		if prInterval < 30*time.Second {
+			prInterval = 30 * time.Second
+		}
+		prTicker = time.NewTicker(prInterval)
+		defer prTicker.Stop()
+	}
+
+	for {
+		if prTicker != nil {
+			select {
+			case <-sigCh:
+				printSummaryAllRepos(states, jsonFlag)
+				return nil
+			case <-ticker.C:
+				pollWorkspacesAllRepos(cache, states, autoApprove, jsonFlag)
+			case <-prTicker.C:
+				pollPRsAllRepos(cache, prStates, states, jsonFlag)
+			}
+		} else {
+			select {
+			case <-sigCh:
+				printSummaryAllRepos(states, jsonFlag)
+				return nil
+			case <-ticker.C:
+				pollWorkspacesAllRepos(cache, states, autoApprove, jsonFlag)
+			}
+		}
+	}
+}
+
+func pollWorkspacesAllRepos(cache *repoStoreCache, states map[string]*watchState, autoApprove bool, jsonFlag *bool) {
+	reposDir := filepath.Join(config.TowrHome(), "repos")
+	allWS, err := store.ListAllWorkspaces(reposDir)
 	if err != nil {
 		return
 	}
@@ -106,8 +327,13 @@ func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove 
 			continue
 		}
 
-		// Find the active dispatch for this workspace.
-		latestDisp, err := app.store.LatestDispatch(app.repoRoot, ws.ID)
+		s, err := cache.getStore(ws.RepoRoot)
+		if err != nil {
+			continue
+		}
+		term := cache.getTerm(ws.RepoRoot)
+
+		latestDisp, err := s.LatestDispatch(ws.RepoRoot, ws.ID)
 		if err != nil || latestDisp == nil {
 			continue
 		}
@@ -116,13 +342,11 @@ func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove 
 			continue
 		}
 
-		// Check if dispatch is still active (not completed/failed).
-		latestEvt, err := app.store.LatestTaskEvent(app.repoRoot, ws.ID, dispID)
+		latestEvt, err := s.LatestTaskEvent(ws.RepoRoot, ws.ID, dispID)
 		if err != nil {
 			continue
 		}
 		if latestEvt != nil && (latestEvt.Kind == store.EventTaskCompleted || latestEvt.Kind == store.EventTaskFailed) {
-			// Already completed — skip unless we haven't recorded it.
 			if st, ok := states[ws.ID]; ok && st.finalStatus == "" {
 				st.finalStatus = "completed"
 			}
@@ -131,21 +355,23 @@ func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove 
 
 		activeCount++
 
-		// Initialize state tracking if needed.
 		if _, ok := states[ws.ID]; !ok {
-			states[ws.ID] = &watchState{
-				dispatchID: dispID,
-			}
+			states[ws.ID] = &watchState{dispatchID: dispID}
 		}
 		st := states[ws.ID]
 		st.dispatchID = dispID
 
-		// Detect current state.
+		// Build a temporary appContext for this workspace.
+		tmpApp := &appContext{
+			repoRoot: ws.RepoRoot,
+			store:    s,
+			term:     term,
+		}
+
 		var currentState dispatch.PaneState
 		var jsonlSummary string
 		usedJSONL := false
 
-		// Try JSONL-based detection first.
 		if ws.WorktreePath != "" {
 			jState, jSummary, jErr := dispatch.DetectClaudeActivity(ws.WorktreePath)
 			if jErr == nil {
@@ -155,8 +381,7 @@ func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove 
 			}
 		}
 
-		// Always check capture-pane for blocked detection, or as fallback.
-		captured, captErr := app.term.CapturePane(ws.ID, 200)
+		captured, captErr := term.CapturePane(ws.ID, 200)
 		if captErr == nil {
 			capState := dispatch.DetectPaneState(captured)
 			if capState == dispatch.PaneBlocked {
@@ -166,27 +391,22 @@ func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove 
 				currentState = capState
 			}
 		} else if !usedJSONL {
-			// Neither JSONL nor capture-pane available.
-			// Check if pane is alive.
-			alive, aliveErr := app.term.IsPaneAlive(ws.ID)
+			alive, aliveErr := term.IsPaneAlive(ws.ID)
 			if aliveErr != nil || !alive {
-				handleTransition(app, ws, st, dispatch.PaneEmpty, "", captured, autoApprove, jsonFlag)
+				handleTransition(tmpApp, ws, st, dispatch.PaneEmpty, "", captured, autoApprove, jsonFlag)
 			}
 			continue
 		}
 
-		// Track working state.
 		if currentState == dispatch.PaneWorking || currentState == dispatch.PaneBlocked {
 			st.sawWorking = true
 		}
 
-		// Handle transitions.
 		if currentState != st.prevState {
-			handleTransition(app, ws, st, currentState, jsonlSummary, captured, autoApprove, jsonFlag)
+			handleTransition(tmpApp, ws, st, currentState, jsonlSummary, captured, autoApprove, jsonFlag)
 			st.prevState = currentState
 		}
 
-		// Check for prolonged idle (>5min).
 		if currentState == dispatch.PaneIdle && st.sawWorking {
 			if st.idleSince.IsZero() {
 				st.idleSince = time.Now()
@@ -210,9 +430,183 @@ func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove 
 		}
 	}
 
-	// Check if all workspaces are idle.
 	if activeCount == 0 && len(states) > 0 {
-		// Check if any workspace was ever active.
+		anyActive := false
+		for _, st := range states {
+			if st.sawWorking {
+				anyActive = true
+				break
+			}
+		}
+		if anyActive {
+			now := time.Now()
+			if *jsonFlag {
+				emitJSON(map[string]interface{}{
+					"time":  formatTime(now),
+					"event": "all_idle",
+				})
+			} else {
+				fmt.Printf("[%s] All workspaces idle. Watching for new dispatches...\n", formatTime(now))
+			}
+		}
+	}
+}
+
+func printSummaryAllRepos(states map[string]*watchState, jsonFlag *bool) {
+	if len(states) == 0 {
+		return
+	}
+
+	if *jsonFlag {
+		summaries := make([]map[string]interface{}, 0, len(states))
+		for wsID, st := range states {
+			status := st.finalStatus
+			if status == "" {
+				status = "unknown"
+			}
+			summaries = append(summaries, map[string]interface{}{
+				"workspace":   wsID,
+				"dispatch_id": st.dispatchID,
+				"status":      status,
+			})
+		}
+		emitJSON(map[string]interface{}{
+			"event":      "stopped",
+			"time":       formatTime(time.Now()),
+			"workspaces": summaries,
+		})
+		return
+	}
+
+	fmt.Println("\nStopped watching. Summary:")
+	for wsID, st := range states {
+		icon := "\u25b6"
+		status := "still working"
+		switch st.finalStatus {
+		case "completed":
+			icon = "\u2713"
+			status = "completed"
+		case "blocked":
+			icon = "\u26a0"
+			status = "blocked"
+		case "exited":
+			icon = "\u26a0"
+			status = "exited"
+		}
+		dispID := st.dispatchID
+		if dispID == "" {
+			dispID = "---"
+		}
+		fmt.Printf("  %s: %s %s %s\n", wsID, dispID, icon, status)
+	}
+}
+
+// ---------- Original single-repo polling (unchanged) ----------
+
+func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove bool, jsonFlag *bool) {
+	allWS, err := app.store.ListWorkspaces(app.repoRoot, store.ListFilter{})
+	if err != nil {
+		return
+	}
+
+	activeCount := 0
+	for _, ws := range allWS {
+		status := workspace.WorkspaceStatus(ws.Status)
+		if status != workspace.StatusRunning && status != workspace.StatusIdle {
+			continue
+		}
+
+		latestDisp, err := app.store.LatestDispatch(app.repoRoot, ws.ID)
+		if err != nil || latestDisp == nil {
+			continue
+		}
+		dispID, _ := latestDisp.Data["dispatch_id"].(string)
+		if dispID == "" {
+			continue
+		}
+
+		latestEvt, err := app.store.LatestTaskEvent(app.repoRoot, ws.ID, dispID)
+		if err != nil {
+			continue
+		}
+		if latestEvt != nil && (latestEvt.Kind == store.EventTaskCompleted || latestEvt.Kind == store.EventTaskFailed) {
+			if st, ok := states[ws.ID]; ok && st.finalStatus == "" {
+				st.finalStatus = "completed"
+			}
+			continue
+		}
+
+		activeCount++
+
+		if _, ok := states[ws.ID]; !ok {
+			states[ws.ID] = &watchState{dispatchID: dispID}
+		}
+		st := states[ws.ID]
+		st.dispatchID = dispID
+
+		var currentState dispatch.PaneState
+		var jsonlSummary string
+		usedJSONL := false
+
+		if ws.WorktreePath != "" {
+			jState, jSummary, jErr := dispatch.DetectClaudeActivity(ws.WorktreePath)
+			if jErr == nil {
+				currentState = jState
+				jsonlSummary = jSummary
+				usedJSONL = true
+			}
+		}
+
+		captured, captErr := app.term.CapturePane(ws.ID, 200)
+		if captErr == nil {
+			capState := dispatch.DetectPaneState(captured)
+			if capState == dispatch.PaneBlocked {
+				currentState = dispatch.PaneBlocked
+			}
+			if !usedJSONL {
+				currentState = capState
+			}
+		} else if !usedJSONL {
+			alive, aliveErr := app.term.IsPaneAlive(ws.ID)
+			if aliveErr != nil || !alive {
+				handleTransition(app, ws, st, dispatch.PaneEmpty, "", captured, autoApprove, jsonFlag)
+			}
+			continue
+		}
+
+		if currentState == dispatch.PaneWorking || currentState == dispatch.PaneBlocked {
+			st.sawWorking = true
+		}
+
+		if currentState != st.prevState {
+			handleTransition(app, ws, st, currentState, jsonlSummary, captured, autoApprove, jsonFlag)
+			st.prevState = currentState
+		}
+
+		if currentState == dispatch.PaneIdle && st.sawWorking {
+			if st.idleSince.IsZero() {
+				st.idleSince = time.Now()
+			} else if time.Since(st.idleSince) > 5*time.Minute && !st.warnedIdle {
+				st.warnedIdle = true
+				now := time.Now()
+				if *jsonFlag {
+					emitJSON(map[string]interface{}{
+						"time":      formatTime(now),
+						"workspace": ws.ID,
+						"event":     "idle_warning",
+						"duration":  time.Since(st.idleSince).String(),
+					})
+				} else {
+					fmt.Printf("[%s] \u23f3 %s: idle for >5min\n", formatTime(now), ws.ID)
+				}
+			}
+		} else {
+			st.idleSince = time.Time{}
+			st.warnedIdle = false
+		}
+	}
+
+	if activeCount == 0 && len(states) > 0 {
 		anyActive := false
 		for _, st := range states {
 			if st.sawWorking {
@@ -239,13 +633,11 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 
 	switch {
 	case st.prevState == dispatch.PaneWorking && newState == dispatch.PaneIdle && st.sawWorking:
-		// Task completed.
 		summary := jsonlSummary
 		if summary == "" && captured != "" {
 			summary = truncate(dispatch.ExtractLastResponse(captured), 200)
 		}
 
-		// Write result to comms dir.
 		commsDir, _ := dispatch.EnsureCommsDir(ws.ID)
 		if commsDir != "" {
 			response := summary
@@ -255,7 +647,6 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 			_ = os.WriteFile(commsDir+"/result.txt", []byte(response), 0o644)
 		}
 
-		// Emit task.completed event.
 		_ = app.store.EmitEvent(store.Event{
 			ID:          uuid.New().String(),
 			Kind:        store.EventTaskCompleted,
@@ -270,7 +661,6 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 			},
 		})
 
-		// Update workspace status to IDLE.
 		ws.Status = string(workspace.StatusIdle)
 		ws.UpdatedAt = now.UTC().Format(time.RFC3339)
 		_ = app.store.SaveWorkspace(ws)
@@ -290,16 +680,14 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 		}
 
 	case newState == dispatch.PaneBlocked:
-		// Permission dialog detected.
 		dialogCtx := "permission dialog active"
 		if captured != "" {
 			dialogCtx = dispatch.ExtractDialogContext(captured)
 		}
 
 		if autoApprove {
-			// Auto-approve: send Enter.
 			if err := app.term.SendKeys(ws.ID, "Enter"); err == nil {
-				st.finalStatus = "working" // still going after approve
+				st.finalStatus = "working"
 				if *jsonFlag {
 					emitJSON(map[string]interface{}{
 						"time":      formatTime(now),
@@ -332,7 +720,6 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 		}
 
 	case newState == dispatch.PaneEmpty:
-		// Claude exited.
 		st.finalStatus = "exited"
 		if *jsonFlag {
 			emitJSON(map[string]interface{}{
@@ -345,7 +732,6 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 		}
 
 	case newState == dispatch.PaneWorking:
-		// Entered working state.
 		if *jsonFlag {
 			emitJSON(map[string]interface{}{
 				"time":      formatTime(now),
@@ -389,7 +775,7 @@ func printSummary(app *appContext, states map[string]*watchState, jsonFlag *bool
 
 	fmt.Println("\nStopped watching. Summary:")
 	for wsID, st := range states {
-		icon := "\u25b6" // default: still working
+		icon := "\u25b6"
 		status := "still working"
 		switch st.finalStatus {
 		case "completed":
@@ -435,4 +821,320 @@ func emitJSON(v interface{}) {
 		return
 	}
 	fmt.Println(string(data))
+}
+
+// ---------- PR monitoring (--react) ----------
+
+// ghPR represents a GitHub PR as returned by `gh pr list --json`.
+type ghPR struct {
+	Number         int           `json:"number"`
+	HeadRefName    string        `json:"headRefName"`
+	ReviewDecision string        `json:"reviewDecision"`
+	URL            string        `json:"url"`
+	StatusChecks   []ghCheckRun  `json:"statusCheckRollup"`
+}
+
+type ghCheckRun struct {
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+}
+
+// checkGHCLI verifies that the gh CLI is installed.
+func checkGHCLI() error {
+	if _, err := exec.LookPath("gh"); err != nil {
+		return fmt.Errorf("--react requires the GitHub CLI (gh). Install it: https://cli.github.com")
+	}
+	return nil
+}
+
+// fetchOpenPRs calls `gh pr list` and returns open PRs.
+func fetchOpenPRs() ([]ghPR, error) {
+	cmd := exec.Command("gh", "pr", "list",
+		"--json", "number,headRefName,reviewDecision,statusCheckRollup,url",
+		"--state", "open", "--limit", "50")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("gh pr list: %w", err)
+	}
+
+	var prs []ghPR
+	if err := json.Unmarshal(out, &prs); err != nil {
+		return nil, fmt.Errorf("parse gh pr list: %w", err)
+	}
+	return prs, nil
+}
+
+// prCIStatus summarizes CI status from statusCheckRollup.
+// Returns "SUCCESS", "FAILURE", or "PENDING".
+func prCIStatus(checks []ghCheckRun) string {
+	if len(checks) == 0 {
+		return "PENDING"
+	}
+
+	hasFailure := false
+	allComplete := true
+	for _, c := range checks {
+		if c.Status != "COMPLETED" {
+			allComplete = false
+			continue
+		}
+		if c.Conclusion == "FAILURE" || c.Conclusion == "ERROR" || c.Conclusion == "TIMED_OUT" || c.Conclusion == "CANCELLED" {
+			hasFailure = true
+		}
+	}
+
+	if hasFailure {
+		return "FAILURE"
+	}
+	if !allComplete {
+		return "PENDING"
+	}
+	return "SUCCESS"
+}
+
+// branchToWorkspaceID extracts workspace ID from a towr/* branch name.
+// e.g., "towr/auth" -> "auth"
+func branchToWorkspaceID(branch string) string {
+	if !strings.HasPrefix(branch, "towr/") {
+		return ""
+	}
+	return strings.TrimPrefix(branch, "towr/")
+}
+
+// pollPRsSingleRepo polls PRs and reacts in single-repo mode.
+func pollPRsSingleRepo(app *appContext, prStates map[int]*prState, wsStates map[string]*watchState, jsonFlag *bool) {
+	prs, err := fetchOpenPRs()
+	if err != nil {
+		return
+	}
+
+	for _, pr := range prs {
+		wsID := branchToWorkspaceID(pr.HeadRefName)
+		if wsID == "" {
+			continue
+		}
+
+		ciStatus := prCIStatus(pr.StatusChecks)
+
+		st, ok := prStates[pr.Number]
+		if !ok {
+			st = &prState{
+				number:      pr.Number,
+				workspaceID: wsID,
+			}
+			prStates[pr.Number] = st
+		}
+
+		// Detect state changes and reset reaction flags.
+		if ciStatus != st.lastCI {
+			st.reactedCI = false
+			if ciStatus != "FAILURE" {
+				// New push or CI recovered — reset retry count.
+				st.ciRetries = 0
+			}
+			st.lastCI = ciStatus
+		}
+		if pr.ReviewDecision != st.lastReview {
+			st.reactedReview = false
+			if pr.ReviewDecision != "CHANGES_REQUESTED" {
+				st.reviewRetries = 0
+			}
+			st.lastReview = pr.ReviewDecision
+		}
+
+		now := time.Now()
+
+		// React: CI failed.
+		if ciStatus == "FAILURE" && !st.reactedCI && st.ciRetries < maxReactRetries {
+			st.reactedCI = true
+			st.ciRetries++
+			prompt := fmt.Sprintf("CI checks failed on PR #%d (%s). Run the failing tests, read the error output, and fix the code. Then push your fixes.", pr.Number, pr.URL)
+			if *jsonFlag {
+				emitJSON(map[string]interface{}{
+					"time":      formatTime(now),
+					"event":     "pr_ci_failed",
+					"pr":        pr.Number,
+					"branch":    pr.HeadRefName,
+					"workspace": wsID,
+					"retry":     st.ciRetries,
+				})
+			} else {
+				fmt.Printf("[%s] \u2717 PR #%d (%s): CI failed \u2014 dispatching fix (%d/%d)\n",
+					formatTime(now), pr.Number, pr.HeadRefName, st.ciRetries, maxReactRetries)
+			}
+			dispatchReaction(wsID, prompt, jsonFlag)
+		}
+
+		// React: changes requested.
+		if pr.ReviewDecision == "CHANGES_REQUESTED" && !st.reactedReview && st.reviewRetries < maxReactRetries {
+			st.reactedReview = true
+			st.reviewRetries++
+			prompt := fmt.Sprintf("Code review on PR #%d has requested changes. Read the review comments with 'gh pr view %d --comments' and address each issue. Then push your fixes.", pr.Number, pr.Number)
+			if *jsonFlag {
+				emitJSON(map[string]interface{}{
+					"time":      formatTime(now),
+					"event":     "pr_changes_requested",
+					"pr":        pr.Number,
+					"branch":    pr.HeadRefName,
+					"workspace": wsID,
+					"retry":     st.reviewRetries,
+				})
+			} else {
+				fmt.Printf("[%s] \U0001f4ac PR #%d (%s): changes requested \u2014 dispatching fix (%d/%d)\n",
+					formatTime(now), pr.Number, pr.HeadRefName, st.reviewRetries, maxReactRetries)
+			}
+			dispatchReaction(wsID, prompt, jsonFlag)
+		}
+
+		// Notify: approved + CI green.
+		if pr.ReviewDecision == "APPROVED" && ciStatus == "SUCCESS" {
+			// Only notify once per state combination.
+			if !st.reactedReview || !st.reactedCI {
+				st.reactedReview = true
+				st.reactedCI = true
+				if *jsonFlag {
+					emitJSON(map[string]interface{}{
+						"time":      formatTime(now),
+						"event":     "pr_ready_to_merge",
+						"pr":        pr.Number,
+						"branch":    pr.HeadRefName,
+						"workspace": wsID,
+					})
+				} else {
+					fmt.Printf("[%s] \u2713 PR #%d (%s): approved + CI passing \u2014 ready to merge\n",
+						formatTime(now), pr.Number, pr.HeadRefName)
+				}
+			}
+		}
+	}
+}
+
+// pollPRsAllRepos polls PRs and reacts in all-repos mode.
+func pollPRsAllRepos(cache *repoStoreCache, prStates map[int]*prState, wsStates map[string]*watchState, jsonFlag *bool) {
+	// In all-repos mode, we still call `gh` from the cwd.
+	// The user is expected to be authenticated with gh for the relevant repos.
+	prs, err := fetchOpenPRs()
+	if err != nil {
+		return
+	}
+
+	for _, pr := range prs {
+		wsID := branchToWorkspaceID(pr.HeadRefName)
+		if wsID == "" {
+			continue
+		}
+
+		ciStatus := prCIStatus(pr.StatusChecks)
+
+		st, ok := prStates[pr.Number]
+		if !ok {
+			st = &prState{
+				number:      pr.Number,
+				workspaceID: wsID,
+			}
+			prStates[pr.Number] = st
+		}
+
+		if ciStatus != st.lastCI {
+			st.reactedCI = false
+			if ciStatus != "FAILURE" {
+				st.ciRetries = 0
+			}
+			st.lastCI = ciStatus
+		}
+		if pr.ReviewDecision != st.lastReview {
+			st.reactedReview = false
+			if pr.ReviewDecision != "CHANGES_REQUESTED" {
+				st.reviewRetries = 0
+			}
+			st.lastReview = pr.ReviewDecision
+		}
+
+		now := time.Now()
+
+		if ciStatus == "FAILURE" && !st.reactedCI && st.ciRetries < maxReactRetries {
+			st.reactedCI = true
+			st.ciRetries++
+			prompt := fmt.Sprintf("CI checks failed on PR #%d (%s). Run the failing tests, read the error output, and fix the code. Then push your fixes.", pr.Number, pr.URL)
+			if *jsonFlag {
+				emitJSON(map[string]interface{}{
+					"time":      formatTime(now),
+					"event":     "pr_ci_failed",
+					"pr":        pr.Number,
+					"branch":    pr.HeadRefName,
+					"workspace": wsID,
+					"retry":     st.ciRetries,
+				})
+			} else {
+				fmt.Printf("[%s] \u2717 PR #%d (%s): CI failed \u2014 dispatching fix (%d/%d)\n",
+					formatTime(now), pr.Number, pr.HeadRefName, st.ciRetries, maxReactRetries)
+			}
+			dispatchReaction(wsID, prompt, jsonFlag)
+		}
+
+		if pr.ReviewDecision == "CHANGES_REQUESTED" && !st.reactedReview && st.reviewRetries < maxReactRetries {
+			st.reactedReview = true
+			st.reviewRetries++
+			prompt := fmt.Sprintf("Code review on PR #%d has requested changes. Read the review comments with 'gh pr view %d --comments' and address each issue. Then push your fixes.", pr.Number, pr.Number)
+			if *jsonFlag {
+				emitJSON(map[string]interface{}{
+					"time":      formatTime(now),
+					"event":     "pr_changes_requested",
+					"pr":        pr.Number,
+					"branch":    pr.HeadRefName,
+					"workspace": wsID,
+					"retry":     st.reviewRetries,
+				})
+			} else {
+				fmt.Printf("[%s] \U0001f4ac PR #%d (%s): changes requested \u2014 dispatching fix (%d/%d)\n",
+					formatTime(now), pr.Number, pr.HeadRefName, st.reviewRetries, maxReactRetries)
+			}
+			dispatchReaction(wsID, prompt, jsonFlag)
+		}
+
+		if pr.ReviewDecision == "APPROVED" && ciStatus == "SUCCESS" {
+			if !st.reactedReview || !st.reactedCI {
+				st.reactedReview = true
+				st.reactedCI = true
+				if *jsonFlag {
+					emitJSON(map[string]interface{}{
+						"time":      formatTime(now),
+						"event":     "pr_ready_to_merge",
+						"pr":        pr.Number,
+						"branch":    pr.HeadRefName,
+						"workspace": wsID,
+					})
+				} else {
+					fmt.Printf("[%s] \u2713 PR #%d (%s): approved + CI passing \u2014 ready to merge\n",
+						formatTime(now), pr.Number, pr.HeadRefName)
+				}
+			}
+		}
+	}
+}
+
+// dispatchReaction shells out to `towr dispatch` to re-dispatch a fix prompt.
+func dispatchReaction(wsID, prompt string, jsonFlag *bool) {
+	towrBin, err := os.Executable()
+	if err != nil {
+		towrBin = "towr"
+	}
+
+	cmd := exec.Command(towrBin, "dispatch", wsID, prompt)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		now := time.Now()
+		if *jsonFlag {
+			emitJSON(map[string]interface{}{
+				"time":      formatTime(now),
+				"event":     "dispatch_failed",
+				"workspace": wsID,
+				"error":     err.Error(),
+			})
+		} else {
+			fmt.Printf("[%s] \u26a0 %s: dispatch failed \u2014 %v\n", formatTime(now), wsID, err)
+		}
+	}
 }
