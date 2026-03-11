@@ -291,7 +291,8 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 	return nil
 }
 
-// runInteractiveWait polls CapturePane for Claude to finish (❯ prompt returns).
+// runInteractiveWait polls for Claude to finish. Uses JSONL-based detection
+// (more reliable) with capture-pane fallback for permission dialog detection.
 func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.Duration, jsonFlag *bool) error {
 	deadline := time.Time{}
 	if timeout > 0 {
@@ -305,38 +306,79 @@ func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.D
 	// Otherwise we'll detect the prompt echo (❯ <user input>) as idle immediately.
 	sawWorking := false
 
+	// Resolve the worktree path for JSONL-based detection.
+	worktreePath := ""
+	if sw, err := app.store.GetWorkspace(app.repoRoot, wsID); err == nil && sw != nil {
+		worktreePath = sw.WorktreePath
+	}
+
 	// Give Claude a moment to start processing before first poll.
 	time.Sleep(3 * time.Second)
 
 	for {
-		captured, err := app.term.CapturePane(wsID, 200)
-		if err != nil {
+		var state dispatch.PaneState
+		var jsonlSummary string
+		usedJSONL := false
+
+		// Try JSONL-based detection first (more reliable for idle/working).
+		if worktreePath != "" {
+			jState, jSummary, err := dispatch.DetectClaudeActivity(worktreePath)
+			if err == nil {
+				state = jState
+				jsonlSummary = jSummary
+				usedJSONL = true
+			}
+		}
+
+		// Always check capture-pane for permission dialog detection,
+		// or as primary detection if JSONL is unavailable.
+		captured, captureErr := app.term.CapturePane(wsID, 200)
+		if captureErr != nil {
 			// Check if pane is still alive.
 			alive, aliveErr := app.term.IsPaneAlive(wsID)
 			if aliveErr != nil || !alive {
 				return fmt.Errorf("tmux session for %q died during dispatch", wsID)
 			}
-			// Transient error, keep polling.
-			<-ticker.C
-			continue
+			if !usedJSONL {
+				// No JSONL and no capture — transient error, keep polling.
+				<-ticker.C
+				continue
+			}
 		}
 
-		state := dispatch.DetectPaneState(captured)
+		// If capture-pane succeeded, check for blocked state (permission dialog).
+		if captureErr == nil {
+			capState := dispatch.DetectPaneState(captured)
+			if capState == dispatch.PaneBlocked {
+				state = dispatch.PaneBlocked
+			}
+			// If JSONL wasn't available, fall back to capture-pane state entirely.
+			if !usedJSONL {
+				state = capState
+			}
+		}
+
 		if state == dispatch.PaneWorking || state == dispatch.PaneBlocked {
 			sawWorking = true
 		}
 		if state == dispatch.PaneIdle && sawWorking {
-			// Claude finished — extract response.
-			response := dispatch.ExtractLastResponse(captured)
+			// Claude finished — extract summary from JSONL or capture-pane.
+			summary := jsonlSummary
+			if summary == "" && captureErr == nil {
+				summary = truncate(dispatch.ExtractLastResponse(captured), 200)
+			}
 
 			// Write response to comms dir.
 			commsDir, _ := dispatch.EnsureCommsDir(wsID)
 			if commsDir != "" {
+				response := summary
+				if captureErr == nil {
+					response = dispatch.ExtractLastResponse(captured)
+				}
 				_ = os.WriteFile(commsDir+"/result.txt", []byte(response), 0o644)
 			}
 
 			// Emit task.completed event.
-			summary := truncate(response, 200)
 			_ = app.store.EmitEvent(store.Event{
 				ID:          uuid.New().String(),
 				Kind:        store.EventTaskCompleted,
@@ -372,7 +414,10 @@ func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.D
 
 		// Check if Claude is blocked on a permission dialog.
 		if state == dispatch.PaneBlocked && sawWorking {
-			dialogCtx := dispatch.ExtractDialogContext(captured)
+			dialogCtx := "permission dialog active"
+			if captureErr == nil {
+				dialogCtx = dispatch.ExtractDialogContext(captured)
+			}
 			if *jsonFlag {
 				return cli.PrintJSON(map[string]interface{}{
 					"workspace_id": wsID,
