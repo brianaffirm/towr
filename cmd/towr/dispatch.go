@@ -368,9 +368,10 @@ func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.D
 			}
 		}
 
-		// If capture-pane succeeded, check for blocked state (permission dialog).
+		// If capture-pane succeeded, check for blocked/idle using agent-specific patterns.
 		if captureErr == nil {
-			capState := dispatch.DetectPaneState(captured)
+			lastActivity := app.term.PaneLastActivity(wsID)
+			capState := dispatch.DetectPaneStateWithActivity(captured, lastActivity, 15*time.Second)
 			if capState == dispatch.PaneBlocked {
 				state = dispatch.PaneBlocked
 			}

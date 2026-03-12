@@ -32,7 +32,7 @@ func newMockRuntime() *mockRuntime {
 	}
 }
 
-func (m *mockRuntime) SpawnWorkspace(id, task string) error {
+func (m *mockRuntime) SpawnWorkspace(id, task, agentType string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.spawned = append(m.spawned, id)

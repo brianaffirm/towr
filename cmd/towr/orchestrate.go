@@ -71,7 +71,7 @@ type appRuntime struct {
 	app *appContext
 }
 
-func (r *appRuntime) SpawnWorkspace(id, task string) error {
+func (r *appRuntime) SpawnWorkspace(id, task, agentType string) error {
 	source := workspace.SpawnSource{Kind: workspace.SpawnFromTask, Value: task}
 
 	// Determine base branch.
@@ -84,11 +84,17 @@ func (r *appRuntime) SpawnWorkspace(id, task string) error {
 		baseBranch = detected
 	}
 
+	var agentIdentity *workspace.AgentIdentity
+	if agentType != "" {
+		agentIdentity = &workspace.AgentIdentity{Runtime: agentType}
+	}
+
 	opts := workspace.CreateOpts{
 		ID:         id,
 		RepoRoot:   r.app.repoRoot,
 		BaseBranch: baseBranch,
 		Source:     source,
+		Agent:      agentIdentity,
 		CopyPaths:  r.app.cfg.Workspace.CopyPaths,
 		LinkPaths:  r.app.cfg.Workspace.LinkPaths,
 	}
