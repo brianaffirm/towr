@@ -78,7 +78,7 @@ type prState struct {
 	commentRetries int    // count of comment reply re-dispatches
 }
 
-const maxReactRetries = 3
+const maxReactRetries = 10
 
 // towrReplySignature is prepended to all towr-generated PR comments
 // so humans can distinguish them from manual comments, and watch can
