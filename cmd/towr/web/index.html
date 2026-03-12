@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>towr — dashboard</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<header>
+  <h1>towr</h1>
+  <span class="header-meta"><span class="dot"></span>live &middot; refreshing every 5s</span>
+</header>
+<div class="stats-bar" id="statsBar"></div>
+<div class="layout">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="terminal-panel" id="termPanel">
+    <div class="terminal-header">
+      <span id="termTitle">terminal</span>
+      <button class="terminal-close" id="termClose">close</button>
+    </div>
+    <div class="terminal-body" id="termBody"></div>
+  </div>
+</div>
+<div class="activity-log">
+  <div class="activity-toggle" id="actToggle"><span><span class="arrow">&#9654;</span>Activity Log <span id="actCount"></span></span></div>
+  <div class="activity-feed" id="actFeed"></div>
+</div>
+<script src="/static/js/app.js"></script>
+</body>
+</html>
