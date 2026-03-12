@@ -337,6 +337,21 @@ Run `towr` with no arguments for an interactive dashboard:
 - `a` toggle between current repo and all workspaces
 - Live refresh every 2 seconds
 
+## Web Dashboard
+
+`towr web` starts a local HTTP server with a browser-based dashboard:
+
+```bash
+towr web                    # http://127.0.0.1:8090
+towr web --addr :9000       # custom port
+```
+
+- **`/`** — HTML dashboard with color-coded status, auto-refreshes every 5s
+- **`/api/workspaces`** — JSON API for scripting and external tools
+- **`/stream/<id>`** — SSE endpoint streaming live tmux output for a workspace
+
+Binds to localhost only by default. Use `--addr 0.0.0.0:8090` to expose on all interfaces.
+
 ## Commands
 
 | Command | Description |
@@ -360,6 +375,7 @@ Run `towr` with no arguments for an interactive dashboard:
 | `towr queue` | Show pending approval items |
 | `towr approve/deny/respond <id>` | Resolve approval items |
 | `towr overlap` | Detect file overlaps between workspaces (merge conflict risk) |
+| `towr web` | Start local HTTP dashboard (JSON API + SSE streaming) |
 | `towr shell-hook` | Print shell integration for prompt nudges |
 
 All commands support `--json` for scripting.
