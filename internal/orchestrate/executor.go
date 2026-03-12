@@ -334,11 +334,41 @@ func (e *Executor) checkTask(task *Task) {
 		}
 
 	case "empty":
-		// Agent exited unexpectedly.
-		e.sawWorking[task.ID] = false
+		if e.sawWorking[task.ID] {
+			// Claude was working and then exited.
+			// Verify there's actual committed work — sawWorking alone isn't enough
+			// because it's also set in the "blocked" state (permission dialog).
+			commitErr := e.runtime.AutoCommit(task.ID)
+			wtPath := e.runtime.GetWorktreePath(task.ID)
+
+			// Check if the workspace has commits beyond the base.
+			hasWork := commitErr == nil && wtPath != ""
+
+			if !hasWork {
+				// No committed work — treat as failure, not completion.
+				e.logger.Log("\u26a0 %s: Claude exited after working but no committed work found", task.ID)
+				break // fall through to retry logic below
+			}
+
+			// Has committed work — treat as completed.
+			if e.plan.Settings.LandPR {
+				if err := e.runtime.LandPR(task.ID); err != nil {
+					e.logger.Log("\u2717 %s: land --pr failed — %v", task.ID, err)
+					e.states[task.ID] = TaskFailed
+					return
+				}
+				e.logger.Log("\u2713 %s: PR created", task.ID)
+			}
+			e.states[task.ID] = TaskCompleted
+			e.results[task.ID] = summary
+			dispID := e.dispatchIDs[task.ID]
+			e.logger.Log("\u2713 %s %s: completed (Claude exited after working)", task.ID, dispID)
+			return
+		}
+		// Agent exited without having worked — retry.
 		if e.retries[task.ID] < e.maxRetries {
 			e.retries[task.ID]++
-			e.logger.Log("\u26a0 %s: agent exited, retrying (%d/%d)", task.ID, e.retries[task.ID], e.maxRetries)
+			e.logger.Log("\u26a0 %s: agent exited without working, retrying (%d/%d)", task.ID, e.retries[task.ID], e.maxRetries)
 			e.states[task.ID] = TaskPending
 		} else {
 			e.logger.Log("\u2717 %s: agent exited, no retries left", task.ID)

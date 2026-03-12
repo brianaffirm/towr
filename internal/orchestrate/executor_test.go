@@ -334,14 +334,12 @@ func TestExecutor_RetryOnExit(t *testing.T) {
 
 	rt := newMockRuntime()
 	rt.stateFunc = func(wsID string, callNum int) (string, string, error) {
-		switch {
-		case callNum <= 1:
-			return "working", "", nil
-		case callNum == 2:
-			// Agent exited — should trigger retry.
+		switch callNum {
+		case 1:
+			// Agent exited immediately without working — should trigger retry.
 			return "empty", "", nil
-		case callNum <= 3:
-			// After retry, working again.
+		case 2:
+			// After retry, working.
 			return "working", "", nil
 		default:
 			return "idle", "done on retry", nil
