@@ -57,23 +57,40 @@ They stack naturally:
 ```
 You (or a master Claude session)
   │
-  ├── towr dispatch auth "build auth with agent team"
-  │     └── Claude Code session
-  │           └── Agent Teams: 3 teammates build auth in parallel
+  ├── towr dispatch auth "build auth" --agent claude-code
+  │     └── Claude Code + Agent Teams (3 workers)
   │
-  ├── towr dispatch billing "implement billing"
-  │     └── Claude Code session
-  │           └── Agent Teams: 2 teammates build billing
+  ├── towr dispatch billing "implement billing" --agent cursor
+  │     └── Cursor CLI session
   │
-  └── towr dispatch docs "update API docs"
-        └── Claude Code session (solo, no team needed)
+  ├── towr dispatch docs "update API docs" --agent claude-code
+  │     └── Claude Code (solo)
+  │
+  └── towr dispatch scripts "run migrations" --agent generic
+        └── Plain bash
 
-  towr watch --react
-    → auto-approves permissions across all sessions
+  towr watch --react --auto-approve
+    → detects agent-specific permission dialogs (Enter for Claude, y for Cursor)
     → creates PRs when tasks complete
     → re-dispatches fixes when CI fails
     → replies to @towr review comments
-    → notifies when PRs are ready to merge
+```
+
+Or in a plan — mix agents per task:
+
+```yaml
+tasks:
+  - id: backend
+    prompt: "Read Jira PROJ-101 and implement the API"
+    agent: claude-code
+  - id: frontend
+    prompt: "Read Jira PROJ-102 and build the UI"
+    agent: cursor
+  - id: tests
+    prompt: "Write integration tests"
+    depends_on: [backend, frontend]
+settings:
+  default_agent: claude-code
 ```
 
 | | Agent Teams | towr |
@@ -81,7 +98,7 @@ You (or a master Claude session)
 | **What it does** | Fast parallel execution within one task | Lifecycle management across many tasks |
 | **Scope** | Single workspace, single session | Multi-workspace, multi-session, multi-repo |
 | **Persistence** | Ephemeral — gone when session ends | Event-sourced — survives crashes, reboots, sleep |
-| **Runtimes** | Claude Code only | Claude Code today; workspace isolation + landing works with any agent |
+| **Runtimes** | Claude Code only | Claude Code, Cursor CLI, Aider, any terminal agent — mix per task |
 | **Merge pipeline** | None — you merge manually | Validated: hooks → rebase → merge → cleanup |
 | **PR workflow** | None | Auto-create PRs, monitor CI, respond to reviews |
 | **Safety model** | `--dangerously-skip-permissions` (all or nothing) | Allowlist safe tools, block dangerous ones, audit bypasses |
