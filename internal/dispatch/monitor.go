@@ -1,6 +1,9 @@
 package dispatch
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // PaneState represents what Claude Code is doing in the tmux pane.
 type PaneState string
@@ -57,6 +60,77 @@ func DetectPaneState(capturedOutput string) PaneState {
 	return PaneWorking
 }
 
+// DetectPaneStateWithPatterns uses agent-specific dialog indicators and idle pattern
+// combined with tmux activity timestamp for reliable detection across all agents.
+func DetectPaneStateWithPatterns(capturedOutput string, dialogIndicators []string, idlePattern string, lastActivity time.Time, minQuiet time.Duration) PaneState {
+	lines := strings.Split(strings.TrimRight(capturedOutput, "\n"), "\n")
+
+	// First pass: check for dialog indicators.
+	checked := 0
+	hasContent := false
+	for i := len(lines) - 1; i >= 0 && checked < 15; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		checked++
+		hasContent = true
+		for _, pattern := range dialogIndicators {
+			if strings.Contains(line, pattern) {
+				return PaneBlocked
+			}
+		}
+	}
+
+	if !hasContent {
+		return PaneEmpty
+	}
+
+	// Second pass: look for idle pattern.
+	checked = 0
+	for i := len(lines) - 1; i >= 0 && checked < 15; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		checked++
+		if strings.Contains(line, idlePattern) {
+			// Apply activity timestamp check.
+			if !lastActivity.IsZero() && time.Since(lastActivity) < minQuiet {
+				return PaneWorking
+			}
+			return PaneIdle
+		}
+	}
+	return PaneWorking
+}
+
+// DetectPaneStateWithActivity combines capture-pane content with tmux activity timestamp
+// for more reliable idle detection. If the pane shows an idle prompt but had recent output
+// (within minQuiet), returns PaneWorking instead of PaneIdle to avoid false positives.
+// Use time.Time{} for lastActivity to skip activity checking (falls back to content-only).
+func DetectPaneStateWithActivity(capturedOutput string, lastActivity time.Time, minQuiet time.Duration) PaneState {
+	state := DetectPaneState(capturedOutput)
+
+	// Only refine idle detection — blocked, working, empty are already reliable.
+	if state != PaneIdle {
+		return state
+	}
+
+	// If no activity timestamp available, trust the content-only result.
+	if lastActivity.IsZero() {
+		return PaneIdle
+	}
+
+	// If the pane had output recently, the idle prompt may be from a previous turn.
+	// The agent could still be processing between tool calls.
+	if time.Since(lastActivity) < minQuiet {
+		return PaneWorking
+	}
+
+	return PaneIdle
+}
+
 // isDialogIndicator checks if a line indicates an active permission/confirmation dialog.
 func isDialogIndicator(line string) bool {
 	return strings.Contains(line, "Esc to cancel") ||
@@ -91,46 +165,6 @@ func isIdlePrompt(line string) bool {
 		return false
 	}
 	return true
-}
-
-// DetectPaneStateWithPatterns is like DetectPaneState but uses caller-provided
-// dialog indicators and idle pattern instead of the hardcoded Claude Code defaults.
-// This enables support for different AI coding agents.
-func DetectPaneStateWithPatterns(capturedOutput string, dialogIndicators []string, idlePattern string) PaneState {
-	lines := strings.Split(strings.TrimRight(capturedOutput, "\n"), "\n")
-
-	// First pass: check if a permission dialog is active in the last 15 lines.
-	checked := 0
-	hasContent := false
-	for i := len(lines) - 1; i >= 0 && checked < 15; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			continue
-		}
-		checked++
-		hasContent = true
-		if IsDialogIndicatorWithPatterns(line, dialogIndicators) {
-			return PaneBlocked
-		}
-	}
-
-	if !hasContent {
-		return PaneEmpty
-	}
-
-	// Second pass: look for idle prompt.
-	checked = 0
-	for i := len(lines) - 1; i >= 0 && checked < 15; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			continue
-		}
-		checked++
-		if isIdlePromptWithPattern(line, idlePattern, dialogIndicators) {
-			return PaneIdle
-		}
-	}
-	return PaneWorking
 }
 
 // IsDialogIndicatorWithPatterns checks if a line matches any of the provided

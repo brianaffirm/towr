@@ -71,7 +71,7 @@ type appRuntime struct {
 	app *appContext
 }
 
-func (r *appRuntime) SpawnWorkspace(id, task string) error {
+func (r *appRuntime) SpawnWorkspace(id, task, agentType string) error {
 	source := workspace.SpawnSource{Kind: workspace.SpawnFromTask, Value: task}
 
 	// Determine base branch.
@@ -84,11 +84,17 @@ func (r *appRuntime) SpawnWorkspace(id, task string) error {
 		baseBranch = detected
 	}
 
+	var agentIdentity *workspace.AgentIdentity
+	if agentType != "" {
+		agentIdentity = &workspace.AgentIdentity{Runtime: agentType}
+	}
+
 	opts := workspace.CreateOpts{
 		ID:         id,
 		RepoRoot:   r.app.repoRoot,
 		BaseBranch: baseBranch,
 		Source:     source,
+		Agent:      agentIdentity,
 		CopyPaths:  r.app.cfg.Workspace.CopyPaths,
 		LinkPaths:  r.app.cfg.Workspace.LinkPaths,
 	}
@@ -178,7 +184,8 @@ func (r *appRuntime) DispatchPrompt(wsID, prompt string) (string, error) {
 		return "", fmt.Errorf("capture pane: %w", err)
 	}
 
-	ag := agent.Default()
+	// Select agent based on workspace metadata.
+	ag := agent.Get(sw.AgentRuntime)
 
 	paneState := dispatch.DetectPaneState(captured)
 	if paneState != dispatch.PaneIdle {
@@ -253,34 +260,38 @@ func (r *appRuntime) DetectState(wsID string) (string, string, error) {
 		return "empty", "", fmt.Errorf("workspace not found")
 	}
 
+	ag := agent.Get(sw.AgentRuntime)
+
 	var state dispatch.PaneState
 	var summary string
-	usedJSONL := false
+	usedAgentDetect := false
 
-	// Try JSONL-based detection first.
+	// Try agent-specific detection first (e.g., JSONL for Claude Code).
 	if sw.WorktreePath != "" {
-		jState, jSummary, jErr := dispatch.DetectClaudeActivity(sw.WorktreePath)
-		if jErr == nil && jState != dispatch.PaneEmpty {
-			state = jState
+		jState, jSummary, jErr := ag.DetectActivity(sw.WorktreePath)
+		if jErr == nil && dispatch.PaneState(jState) != dispatch.PaneEmpty {
+			state = dispatch.PaneState(jState)
 			summary = jSummary
-			usedJSONL = true
+			usedAgentDetect = true
 		}
-		if jErr == nil && jState == dispatch.PaneEmpty {
+		if jErr == nil && dispatch.PaneState(jState) == dispatch.PaneEmpty {
 			summary = jSummary
 		}
 	}
 
 	// Check capture-pane for blocked detection or as fallback.
+	// Use activity timestamp for more reliable idle detection.
 	captured, captErr := r.app.term.CapturePane(wsID, 200)
 	if captErr == nil {
-		capState := dispatch.DetectPaneState(captured)
+		lastActivity := r.app.term.PaneLastActivity(wsID)
+		capState := dispatch.DetectPaneStateWithActivity(captured, lastActivity, 15*time.Second)
 		if capState == dispatch.PaneBlocked {
 			state = dispatch.PaneBlocked
 		}
-		if !usedJSONL {
+		if !usedAgentDetect {
 			state = capState
 		}
-	} else if !usedJSONL {
+	} else if !usedAgentDetect {
 		alive, aliveErr := r.app.term.IsPaneAlive(wsID)
 		if aliveErr != nil || !alive {
 			return "empty", "", nil

@@ -49,6 +49,11 @@ func (c *ClaudeCode) StartupDialogs() []string {
 	return []string{"Enter to confirm"}
 }
 
+// StartupKey returns "Enter" for Claude Code trust dialogs.
+func (c *ClaudeCode) StartupKey() string {
+	return "Enter"
+}
+
 // CompletionMode returns "jsonl" — Claude Code signals completion via JSONL event files.
 func (c *ClaudeCode) CompletionMode() string {
 	return "jsonl"

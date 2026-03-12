@@ -1,6 +1,9 @@
 package terminal
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // HeadlessBackend implements Backend for non-interactive use.
 // It prints the worktree path instead of managing tmux panes.
@@ -43,6 +46,10 @@ func (h *HeadlessBackend) PasteBuffer(id, content string) error {
 
 func (h *HeadlessBackend) CapturePane(id string, lines int) (string, error) {
 	return "", fmt.Errorf("capture-pane not supported in headless mode")
+}
+
+func (h *HeadlessBackend) PaneLastActivity(id string) time.Time {
+	return time.Time{}
 }
 
 func (h *HeadlessBackend) IsHeadless() bool {

@@ -1,5 +1,7 @@
 package terminal
 
+import "time"
+
 // PaneInfo describes a terminal pane managed by towr.
 type PaneInfo struct {
 	ID      string
@@ -27,6 +29,9 @@ type Backend interface {
 	// CapturePane captures the visible content of the workspace's chat pane.
 	// lines specifies how many lines of scrollback to capture.
 	CapturePane(id string, lines int) (string, error)
+	// PaneLastActivity returns the time of the last output in the pane.
+	// Returns zero time if unavailable.
+	PaneLastActivity(id string) time.Time
 	// IsHeadless returns true if the backend cannot manage terminal sessions.
 	IsHeadless() bool
 }

@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/brianaffirm/towr/internal/agent"
 	"github.com/brianaffirm/towr/internal/config"
 	"github.com/brianaffirm/towr/internal/dispatch"
 	"github.com/brianaffirm/towr/internal/store"
@@ -393,9 +394,13 @@ func pollWorkspacesAllRepos(cache *repoStoreCache, states map[string]*watchState
 			}
 		}
 
+		// Look up the agent for this workspace to use correct dialog/idle patterns.
+		ag := agent.Get(ws.AgentRuntime)
+
 		captured, captErr := term.CapturePane(ws.ID, 200)
 		if captErr == nil {
-			capState := dispatch.DetectPaneState(captured)
+			lastActivity := term.PaneLastActivity(ws.ID)
+			capState := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 15*time.Second)
 			if capState == dispatch.PaneBlocked {
 				currentState = dispatch.PaneBlocked
 			}
@@ -414,7 +419,8 @@ func pollWorkspacesAllRepos(cache *repoStoreCache, states map[string]*watchState
 			st.sawWorking = true
 		}
 
-		if currentState != st.prevState {
+		// Always handle blocked state (new dialog may appear even if state didn't change).
+		if currentState == dispatch.PaneBlocked || currentState != st.prevState {
 			handleTransition(tmpApp, ws, st, currentState, jsonlSummary, captured, autoApprove, jsonFlag)
 			st.prevState = currentState
 		}
@@ -572,9 +578,12 @@ func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove 
 			}
 		}
 
+		ag := agent.Get(ws.AgentRuntime)
+
 		captured, captErr := app.term.CapturePane(ws.ID, 200)
 		if captErr == nil {
-			capState := dispatch.DetectPaneState(captured)
+			lastActivity := app.term.PaneLastActivity(ws.ID)
+			capState := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 15*time.Second)
 			if capState == dispatch.PaneBlocked {
 				currentState = dispatch.PaneBlocked
 			}
@@ -593,7 +602,7 @@ func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove 
 			st.sawWorking = true
 		}
 
-		if currentState != st.prevState {
+		if currentState == dispatch.PaneBlocked || currentState != st.prevState {
 			handleTransition(app, ws, st, currentState, jsonlSummary, captured, autoApprove, jsonFlag)
 			st.prevState = currentState
 		}
@@ -701,7 +710,15 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 		}
 
 		if autoApprove {
-			if err := app.term.SendKeys(ws.ID, "Enter"); err == nil {
+			// Pick the right approval key based on the dialog type.
+			// Cursor uses 'y' for shell approval, 'a' for trust. Claude uses Enter.
+			approveKey := "Enter"
+			if strings.Contains(captured, "Run this command?") || strings.Contains(captured, "Run (once)") {
+				approveKey = "y" // Cursor shell approval
+			} else if strings.Contains(captured, "Trust this workspace") {
+				approveKey = "a" // Cursor trust dialog
+			}
+			if err := app.term.SendKeys(ws.ID, approveKey); err == nil {
 				st.finalStatus = "working"
 				if *jsonFlag {
 					emitJSON(map[string]interface{}{
@@ -721,17 +738,26 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 				}
 				// Rapid re-check: after approving, Claude often hits another dialog
 				// within seconds. Poll quickly to catch consecutive dialogs.
+				wsAgent := agent.Get(ws.AgentRuntime)
 				for retry := 0; retry < 5; retry++ {
 					time.Sleep(3 * time.Second)
 					recapture, recapErr := app.term.CapturePane(ws.ID, 200)
 					if recapErr != nil {
 						break
 					}
-					reState := dispatch.DetectPaneState(recapture)
+					reActivity := app.term.PaneLastActivity(ws.ID)
+					reState := dispatch.DetectPaneStateWithPatterns(recapture, wsAgent.DialogIndicators(), wsAgent.IdlePattern(), reActivity, 5*time.Second)
 					if reState != dispatch.PaneBlocked {
 						break
 					}
-					_ = app.term.SendKeys(ws.ID, "Enter")
+					// Pick approval key for this dialog too
+					reKey := "Enter"
+					if strings.Contains(recapture, "Run this command?") || strings.Contains(recapture, "Run (once)") {
+						reKey = "y"
+					} else if strings.Contains(recapture, "Trust this workspace") {
+						reKey = "a"
+					}
+					_ = app.term.SendKeys(ws.ID, reKey)
 					reDialog := dispatch.ExtractDialogContext(recapture)
 					if !*jsonFlag {
 						fmt.Printf("[%s] \u2713 %s: auto-approved \u2014 %q\n", formatTime(time.Now()), ws.ID, reDialog)

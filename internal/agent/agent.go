@@ -22,6 +22,10 @@ type Agent interface {
 	// (e.g., trust folder confirmations).
 	StartupDialogs() []string
 
+	// StartupKey returns the key to send to dismiss startup dialogs.
+	// Defaults to "Enter" for most agents. Cursor uses "a".
+	StartupKey() string
+
 	// CompletionMode describes how the agent signals task completion.
 	// Supported values: "jsonl", "idle_pattern", "process_exit".
 	CompletionMode() string

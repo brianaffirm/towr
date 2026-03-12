@@ -25,8 +25,8 @@ const (
 // Runtime abstracts the operations the executor needs from the host application.
 // This avoids importing the cmd/towr appContext directly.
 type Runtime interface {
-	// SpawnWorkspace creates a new workspace with the given ID and task description.
-	SpawnWorkspace(id, task string) error
+	// SpawnWorkspace creates a new workspace with the given ID, task, and agent type.
+	SpawnWorkspace(id, task, agentType string) error
 	// DispatchPrompt sends a prompt to an existing workspace's agent session.
 	DispatchPrompt(wsID, prompt string) (dispatchID string, err error)
 	// DetectState checks the current state of a workspace's agent.
@@ -232,8 +232,12 @@ func (e *Executor) spawnAndDispatch(task *Task) {
 		e.logger.Log("\u25b6 %s: spawning (no dependencies)", task.ID)
 	}
 
-	// Spawn workspace.
-	if err := e.runtime.SpawnWorkspace(task.ID, task.Prompt); err != nil {
+	// Spawn workspace with agent type from task or plan default.
+	agentType := task.Agent
+	if agentType == "" {
+		agentType = e.plan.Settings.DefaultAgent
+	}
+	if err := e.runtime.SpawnWorkspace(task.ID, task.Prompt, agentType); err != nil {
 		e.logger.Log("\u2717 %s: spawn failed — %v", task.ID, err)
 		e.states[task.ID] = TaskFailed
 		return

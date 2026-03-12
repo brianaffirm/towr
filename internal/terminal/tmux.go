@@ -184,6 +184,25 @@ func (t *TmuxBackend) CapturePane(id string, lines int) (string, error) {
 	return string(out), nil
 }
 
+// PaneLastActivity returns the time of the last output in the pane.
+func (t *TmuxBackend) PaneLastActivity(id string) time.Time {
+	session := t.sessionName(id)
+	cmd := exec.Command("tmux", "list-panes", "-t", session+":chat", "-F", "#{window_activity}")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return time.Time{}
+	}
+	s := strings.TrimSpace(string(out))
+	if s == "" {
+		return time.Time{}
+	}
+	var ts int64
+	if _, err := fmt.Sscanf(s, "%d", &ts); err != nil {
+		return time.Time{}
+	}
+	return time.Unix(ts, 0)
+}
+
 func (t *TmuxBackend) IsHeadless() bool {
 	return false
 }
