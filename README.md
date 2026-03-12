@@ -86,9 +86,12 @@ tasks:
   - id: frontend
     prompt: "Read Jira PROJ-102 and build the UI"
     agent: cursor
+  - id: refactor
+    prompt: "Read Jira PROJ-103 and refactor the data layer"
+    agent: codex
   - id: tests
     prompt: "Write integration tests"
-    depends_on: [backend, frontend]
+    depends_on: [backend, frontend, refactor]
 settings:
   default_agent: claude-code
 ```
@@ -98,7 +101,7 @@ settings:
 | **What it does** | Fast parallel execution within one task | Lifecycle management across many tasks |
 | **Scope** | Single workspace, single session | Multi-workspace, multi-session, multi-repo |
 | **Persistence** | Ephemeral — gone when session ends | Event-sourced — survives crashes, reboots, sleep |
-| **Runtimes** | Claude Code only | Claude Code, Cursor CLI, Aider, any terminal agent — mix per task |
+| **Runtimes** | Claude Code only | Claude Code, Cursor CLI, Codex CLI, Aider — mix per task |
 | **Merge pipeline** | None — you merge manually | Validated: hooks → rebase → merge → cleanup |
 | **PR workflow** | None | Auto-create PRs, monitor CI, respond to reviews |
 | **Safety model** | `--dangerously-skip-permissions` (all or nothing) | Allowlist safe tools, block dangerous ones, audit bypasses |
