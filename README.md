@@ -1,48 +1,96 @@
 # towr
 
-The operations layer for parallel AI-assisted development. Isolate, coordinate, validate, and land code changes across any number of agents and runtimes.
+Ship features while you sleep — without giving agents the keys to the kingdom.
 
+towr orchestrates parallel AI coding sessions with **granular permission control**: agents can edit files and run tests but can't `rm -rf` or force push. Every action is recorded in an immutable audit log. Every bypass requires a reason. Pre-land hooks block bad merges. Agents create PRs, not direct commits to main. Nothing lands without validation.
+
+The agents work. You review PRs in the morning.
+
+```yaml
+# sprint.yaml — point at your Jira tickets, go to bed
+name: "PROJ sprint 24"
+tasks:
+  - id: proj-1234
+    prompt: "Read Jira ticket PROJ-1234 and implement what it describes. Run tests."
+  - id: proj-1235
+    prompt: "Read Jira ticket PROJ-1235 and implement it."
+  - id: proj-1236
+    prompt: "Read Jira ticket PROJ-1236. Depends on PROJ-1234."
+    depends_on: [proj-1234]
+settings:
+  auto_approve: true    # scoped allowlist, not blanket permissions
+  land_pr: true         # each task creates a PR, nothing merges to main
 ```
-Claude Code, Cursor, Aider, Agent Teams, shell scripts, CI bots
-                        |
-                    towr (this tool)
-            isolate | coordinate | validate | audit | land
-                        |
-                      git (source of truth)
+
+```bash
+towr orchestrate sprint.yaml   # spawns 3 workspaces, agents read Jira tickets, create PRs
+towr watch --react --all --auto-approve  # approves safe actions, monitors PRs, auto-fixes CI + reviews
+# morning: 3 PRs ready for your review
 ```
 
-**towr is NOT** an agent, a terminal emulator, or a Claude Code replacement. It's the layer beneath all of them — managing workspaces, coordinating work, enforcing validation gates, and keeping an audit trail.
+The YAML can reference anything the agent can read — Jira tickets, GitHub issues, tech specs, design docs, Slack threads. Write it by hand or have Claude generate it from your sprint board.
 
-## The problem
+## What towr does
 
-Running parallel AI coding agents produces code that needs to be safely isolated, validated, merged, and cleaned up. No tool owns this lifecycle. You end up with stale branches, orphaned worktrees, merge conflicts from file overlap, and no record of which agent changed what.
+**Orchestrate** — Define a YAML task graph. towr spawns isolated workspaces, dispatches prompts to Claude Code sessions, respects dependency order, merges upstream code into dependent tasks, auto-commits, and creates PRs.
 
-towr gives you isolated git worktrees per task, tracks them in one place, coordinates work across sessions, and lands them safely.
+**Watch** — Long-running monitor that auto-approves permission dialogs, detects CI failures on PRs and re-dispatches fixes, reads `@towr` review comments and dispatches replies, and notifies when PRs are ready to merge.
+
+**Land safely** — Validated merge pipeline with pre-land hooks, rebase-ff, protected branch enforcement, and full cleanup. Not a git alias — a pipeline that blocks bad merges.
+
+**Stay safe** — "Auto-approve" doesn't mean "approve everything." Agents get a `.claude/settings.json` allowlist: file edits, builds, and tests are pre-approved; `rm -rf`, `git push --force`, and network calls are blocked. This isn't `--dangerously-skip-permissions` — it's a scoped allowlist where you choose what's safe. Permissions that fall outside the allowlist are surfaced in the web dashboard and CLI, not silently skipped. Pre-land hooks run your test suite before any merge. Protected branches block direct pushes — agents create PRs, humans merge. Every `--force` or `--no-hooks` bypass is recorded in the audit log with a mandatory `--reason`. You can export the full trail with `towr audit --since 7d --csv` for compliance.
+
+**Audit everything** — Every dispatch, approval, completion, and failure is recorded in an immutable event store. `towr audit --since 24h` exports the trail for compliance. `towr log <id>` shows per-workspace history. Bypass events (`--force`, `--no-hooks`) are flagged with `[BYPASS]`.
+
+**See everything** — Web dashboard (`towr web`) with live workspace cards grouped by attention level, terminal streaming via SSE, activity feed, and action buttons. TUI dashboard (`towr`) for the terminal. `towr ls` for quick status.
 
 ## How towr fits with Claude Code Agent Teams
 
-Agent Teams coordinates work **within** a single project scope. towr coordinates work **across** project scopes. They stack:
+towr and Agent Teams solve different problems at different layers. They're designed to stack, not compete.
+
+**Agent Teams** is a fast execution engine — one lead Claude spawns teammates that work in parallel within a single task. Great for: "implement this feature using 3 parallel workers." The teammates coordinate via SendMessage and task queues, share a session, and disappear when done.
+
+**towr** is the operations layer above — it manages the workspaces those agents work in, the branches they commit to, the PRs they create, the CI that validates their code, and the review feedback loop that follows. It persists across sessions, works with any runtime, and keeps an audit trail.
+
+They stack naturally:
 
 ```
-Master Claude (you)
-  └── towr dispatch auth "build auth with agent team"
-        └── Claude Code → Agent Teams (3 teammates inside this workspace)
-  └── towr dispatch billing "implement billing"
-        └── Claude Code → Agent Teams (2 teammates inside this workspace)
+You (or a master Claude session)
+  │
+  ├── towr dispatch auth "build auth with agent team"
+  │     └── Claude Code session
+  │           └── Agent Teams: 3 teammates build auth in parallel
+  │
+  ├── towr dispatch billing "implement billing"
+  │     └── Claude Code session
+  │           └── Agent Teams: 2 teammates build billing
+  │
   └── towr dispatch docs "update API docs"
-        └── Claude Code (solo, no team needed)
+        └── Claude Code session (solo, no team needed)
+
+  towr watch --react
+    → auto-approves permissions across all sessions
+    → creates PRs when tasks complete
+    → re-dispatches fixes when CI fails
+    → replies to @towr review comments
+    → notifies when PRs are ready to merge
 ```
 
 | | Agent Teams | towr |
 |---|---|---|
-| **Scope** | Fast parallel work within one workspace | Cross-workspace lifecycle management |
-| **Persistence** | Ephemeral — no resume, no memory | Event-sourced — full audit trail |
-| **Runtimes** | Claude Code only | Any agent runtime |
-| **Merge pipeline** | None — you merge manually | Validated landing with hooks |
-| **Permission visibility** | Children block silently | Surfaces dialogs, selective approval |
-| **State after crash** | Lost | `towr doctor` recovers in 60s |
+| **What it does** | Fast parallel execution within one task | Lifecycle management across many tasks |
+| **Scope** | Single workspace, single session | Multi-workspace, multi-session, multi-repo |
+| **Persistence** | Ephemeral — gone when session ends | Event-sourced — survives crashes, reboots, sleep |
+| **Runtimes** | Claude Code only | Claude Code, Cursor, Aider, any terminal agent |
+| **Merge pipeline** | None — you merge manually | Validated: hooks → rebase → merge → cleanup |
+| **PR workflow** | None | Auto-create PRs, monitor CI, respond to reviews |
+| **Safety model** | `--dangerously-skip-permissions` (all or nothing) | Allowlist safe tools, block dangerous ones, audit bypasses |
+| **State after crash** | Lost | `towr doctor` → full recovery in 60s |
+| **Audit trail** | None | Immutable event log — every action, every bypass, exportable |
 
-Use Agent Teams for execution speed. Use towr for the lifecycle around it.
+**Use Agent Teams when** you want 3 workers to build one feature fast.
+**Use towr when** you want 5 features built overnight with PRs, CI, and review handling.
+**Use both** when you want 5 features built overnight, each by a team of 3 workers.
 
 ```
 $ towr spawn "refactor auth" --id auth
