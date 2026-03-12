@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/brianaffirm/towr/internal/agent"
 	"github.com/brianaffirm/towr/internal/config"
 	"github.com/brianaffirm/towr/internal/dispatch"
 	"github.com/brianaffirm/towr/internal/store"
@@ -393,10 +394,13 @@ func pollWorkspacesAllRepos(cache *repoStoreCache, states map[string]*watchState
 			}
 		}
 
+		// Look up the agent for this workspace to use correct dialog/idle patterns.
+		ag := agent.Get(ws.AgentRuntime)
+
 		captured, captErr := term.CapturePane(ws.ID, 200)
 		if captErr == nil {
 			lastActivity := term.PaneLastActivity(ws.ID)
-			capState := dispatch.DetectPaneStateWithActivity(captured, lastActivity, 15*time.Second)
+			capState := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 15*time.Second)
 			if capState == dispatch.PaneBlocked {
 				currentState = dispatch.PaneBlocked
 			}
@@ -415,7 +419,8 @@ func pollWorkspacesAllRepos(cache *repoStoreCache, states map[string]*watchState
 			st.sawWorking = true
 		}
 
-		if currentState != st.prevState {
+		// Always handle blocked state (new dialog may appear even if state didn't change).
+		if currentState == dispatch.PaneBlocked || currentState != st.prevState {
 			handleTransition(tmpApp, ws, st, currentState, jsonlSummary, captured, autoApprove, jsonFlag)
 			st.prevState = currentState
 		}
@@ -573,10 +578,12 @@ func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove 
 			}
 		}
 
+		ag := agent.Get(ws.AgentRuntime)
+
 		captured, captErr := app.term.CapturePane(ws.ID, 200)
 		if captErr == nil {
 			lastActivity := app.term.PaneLastActivity(ws.ID)
-			capState := dispatch.DetectPaneStateWithActivity(captured, lastActivity, 15*time.Second)
+			capState := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 15*time.Second)
 			if capState == dispatch.PaneBlocked {
 				currentState = dispatch.PaneBlocked
 			}
@@ -595,7 +602,7 @@ func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove 
 			st.sawWorking = true
 		}
 
-		if currentState != st.prevState {
+		if currentState == dispatch.PaneBlocked || currentState != st.prevState {
 			handleTransition(app, ws, st, currentState, jsonlSummary, captured, autoApprove, jsonFlag)
 			st.prevState = currentState
 		}
@@ -731,13 +738,15 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 				}
 				// Rapid re-check: after approving, Claude often hits another dialog
 				// within seconds. Poll quickly to catch consecutive dialogs.
+				wsAgent := agent.Get(ws.AgentRuntime)
 				for retry := 0; retry < 5; retry++ {
 					time.Sleep(3 * time.Second)
 					recapture, recapErr := app.term.CapturePane(ws.ID, 200)
 					if recapErr != nil {
 						break
 					}
-					reState := dispatch.DetectPaneState(recapture)
+					reActivity := app.term.PaneLastActivity(ws.ID)
+					reState := dispatch.DetectPaneStateWithPatterns(recapture, wsAgent.DialogIndicators(), wsAgent.IdlePattern(), reActivity, 5*time.Second)
 					if reState != dispatch.PaneBlocked {
 						break
 					}

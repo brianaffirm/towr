@@ -60,6 +60,51 @@ func DetectPaneState(capturedOutput string) PaneState {
 	return PaneWorking
 }
 
+// DetectPaneStateWithPatterns uses agent-specific dialog indicators and idle pattern
+// combined with tmux activity timestamp for reliable detection across all agents.
+func DetectPaneStateWithPatterns(capturedOutput string, dialogIndicators []string, idlePattern string, lastActivity time.Time, minQuiet time.Duration) PaneState {
+	lines := strings.Split(strings.TrimRight(capturedOutput, "\n"), "\n")
+
+	// First pass: check for dialog indicators.
+	checked := 0
+	hasContent := false
+	for i := len(lines) - 1; i >= 0 && checked < 15; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		checked++
+		hasContent = true
+		for _, pattern := range dialogIndicators {
+			if strings.Contains(line, pattern) {
+				return PaneBlocked
+			}
+		}
+	}
+
+	if !hasContent {
+		return PaneEmpty
+	}
+
+	// Second pass: look for idle pattern.
+	checked = 0
+	for i := len(lines) - 1; i >= 0 && checked < 15; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		checked++
+		if strings.Contains(line, idlePattern) {
+			// Apply activity timestamp check.
+			if !lastActivity.IsZero() && time.Since(lastActivity) < minQuiet {
+				return PaneWorking
+			}
+			return PaneIdle
+		}
+	}
+	return PaneWorking
+}
+
 // DetectPaneStateWithActivity combines capture-pane content with tmux activity timestamp
 // for more reliable idle detection. If the pane shows an idle prompt but had recent output
 // (within minQuiet), returns PaneWorking instead of PaneIdle to avoid false positives.
@@ -120,46 +165,6 @@ func isIdlePrompt(line string) bool {
 		return false
 	}
 	return true
-}
-
-// DetectPaneStateWithPatterns is like DetectPaneState but uses caller-provided
-// dialog indicators and idle pattern instead of the hardcoded Claude Code defaults.
-// This enables support for different AI coding agents.
-func DetectPaneStateWithPatterns(capturedOutput string, dialogIndicators []string, idlePattern string) PaneState {
-	lines := strings.Split(strings.TrimRight(capturedOutput, "\n"), "\n")
-
-	// First pass: check if a permission dialog is active in the last 15 lines.
-	checked := 0
-	hasContent := false
-	for i := len(lines) - 1; i >= 0 && checked < 15; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			continue
-		}
-		checked++
-		hasContent = true
-		if IsDialogIndicatorWithPatterns(line, dialogIndicators) {
-			return PaneBlocked
-		}
-	}
-
-	if !hasContent {
-		return PaneEmpty
-	}
-
-	// Second pass: look for idle prompt.
-	checked = 0
-	for i := len(lines) - 1; i >= 0 && checked < 15; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			continue
-		}
-		checked++
-		if isIdlePromptWithPattern(line, idlePattern, dialogIndicators) {
-			return PaneIdle
-		}
-	}
-	return PaneWorking
 }
 
 // IsDialogIndicatorWithPatterns checks if a line matches any of the provided

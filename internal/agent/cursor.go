@@ -19,9 +19,11 @@ func (c *CursorAgent) LaunchEnv() map[string]string {
 }
 
 // IdlePattern returns the pattern used to detect Cursor's idle prompt.
-// Cursor shows "→ Add a follow-up" in a bordered input box when idle.
+// Cursor shows "→ Plan, search, build anything" on first launch,
+// and "→ Add a follow-up" after completing a task.
+// Both contain the → character inside a bordered input box.
 func (c *CursorAgent) IdlePattern() string {
-	return "Add a follow-up"
+	return "→"
 }
 
 // DialogIndicators returns strings that indicate a permission/confirmation dialog.
