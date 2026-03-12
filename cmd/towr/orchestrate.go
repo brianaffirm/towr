@@ -249,10 +249,13 @@ func (r *appRuntime) DetectState(wsID string) (string, string, error) {
 	// Try JSONL-based detection first.
 	if sw.WorktreePath != "" {
 		jState, jSummary, jErr := dispatch.DetectClaudeActivity(sw.WorktreePath)
-		if jErr == nil {
+		if jErr == nil && jState != dispatch.PaneEmpty {
 			state = jState
 			summary = jSummary
 			usedJSONL = true
+		}
+		if jErr == nil && jState == dispatch.PaneEmpty {
+			summary = jSummary
 		}
 	}
 
