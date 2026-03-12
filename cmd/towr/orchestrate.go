@@ -178,7 +178,8 @@ func (r *appRuntime) DispatchPrompt(wsID, prompt string) (string, error) {
 		return "", fmt.Errorf("capture pane: %w", err)
 	}
 
-	ag := agent.Default()
+	// Select agent based on workspace metadata.
+	ag := agent.Get(sw.AgentRuntime)
 
 	paneState := dispatch.DetectPaneState(captured)
 	if paneState != dispatch.PaneIdle {
@@ -253,19 +254,21 @@ func (r *appRuntime) DetectState(wsID string) (string, string, error) {
 		return "empty", "", fmt.Errorf("workspace not found")
 	}
 
+	ag := agent.Get(sw.AgentRuntime)
+
 	var state dispatch.PaneState
 	var summary string
-	usedJSONL := false
+	usedAgentDetect := false
 
-	// Try JSONL-based detection first.
+	// Try agent-specific detection first (e.g., JSONL for Claude Code).
 	if sw.WorktreePath != "" {
-		jState, jSummary, jErr := dispatch.DetectClaudeActivity(sw.WorktreePath)
-		if jErr == nil && jState != dispatch.PaneEmpty {
-			state = jState
+		jState, jSummary, jErr := ag.DetectActivity(sw.WorktreePath)
+		if jErr == nil && dispatch.PaneState(jState) != dispatch.PaneEmpty {
+			state = dispatch.PaneState(jState)
 			summary = jSummary
-			usedJSONL = true
+			usedAgentDetect = true
 		}
-		if jErr == nil && jState == dispatch.PaneEmpty {
+		if jErr == nil && dispatch.PaneState(jState) == dispatch.PaneEmpty {
 			summary = jSummary
 		}
 	}
@@ -277,10 +280,10 @@ func (r *appRuntime) DetectState(wsID string) (string, string, error) {
 		if capState == dispatch.PaneBlocked {
 			state = dispatch.PaneBlocked
 		}
-		if !usedJSONL {
+		if !usedAgentDetect {
 			state = capState
 		}
-	} else if !usedJSONL {
+	} else if !usedAgentDetect {
 		alive, aliveErr := r.app.term.IsPaneAlive(wsID)
 		if aliveErr != nil || !alive {
 			return "empty", "", nil

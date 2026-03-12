@@ -19,14 +19,16 @@ type Task struct {
 	ID        string   `yaml:"id"`
 	Prompt    string   `yaml:"prompt"`
 	DependsOn []string `yaml:"depends_on"`
+	Agent     string   `yaml:"agent,omitempty"` // agent runtime override; defaults to settings.default_agent or "claude-code"
 }
 
 // Settings controls execution behavior for the plan.
 type Settings struct {
 	AutoApprove  bool   `yaml:"auto_approve"`
 	MaxRetries   int    `yaml:"max_retries"`
-	PollInterval string `yaml:"poll_interval"` // e.g. "10s"
-	LandPR       bool   `yaml:"land_pr"`       // auto-land each task as a PR when complete
+	PollInterval string `yaml:"poll_interval"`    // e.g. "10s"
+	LandPR       bool   `yaml:"land_pr"`          // auto-land each task as a PR when complete
+	DefaultAgent string `yaml:"default_agent,omitempty"` // default agent runtime for tasks without explicit agent
 }
 
 // LoadPlan reads and parses a YAML plan file from the given path.

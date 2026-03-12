@@ -214,7 +214,8 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 		return fmt.Errorf("capture pane: %w", err)
 	}
 
-	ag := agent.Default()
+	// Select agent based on workspace metadata.
+	ag := agent.Get(sw.AgentRuntime)
 
 	paneState := dispatch.DetectPaneState(captured)
 	if paneState != dispatch.PaneIdle {
@@ -302,8 +303,8 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 	return nil
 }
 
-// runInteractiveWait polls for Claude to finish. Uses JSONL-based detection
-// (more reliable) with capture-pane fallback for permission dialog detection.
+// runInteractiveWait polls for the agent to finish. Uses agent-specific detection
+// (e.g., JSONL for Claude Code) with capture-pane fallback for permission dialog detection.
 func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.Duration, jsonFlag *bool) error {
 	deadline := time.Time{}
 	if timeout > 0 {
@@ -313,40 +314,46 @@ func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.D
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
-	// We must see Claude enter a working/blocked state before accepting idle as "done".
-	// Otherwise we'll detect the prompt echo (❯ <user input>) as idle immediately.
+	// We must see the agent enter a working/blocked state before accepting idle as "done".
+	// Otherwise we'll detect the prompt echo as idle immediately.
 	sawWorking := false
 
-	// Resolve the worktree path for JSONL-based detection.
+	// Resolve the worktree path and agent for detection.
 	worktreePath := ""
+	var ag agent.Agent
 	if sw, err := app.store.GetWorkspace(app.repoRoot, wsID); err == nil && sw != nil {
 		worktreePath = sw.WorktreePath
+		ag = agent.Get(sw.AgentRuntime)
+	} else {
+		ag = agent.Default()
 	}
 
-	// Give Claude a moment to start processing before first poll.
+	// Give the agent a moment to start processing before first poll.
 	time.Sleep(3 * time.Second)
 
 	for {
 		var state dispatch.PaneState
-		var jsonlSummary string
-		usedJSONL := false
+		var agentSummary string
+		usedAgentDetect := false
 
-		// Try JSONL-based detection first (more reliable for idle/working).
+		// Try agent-specific detection first (more reliable for idle/working).
 		if worktreePath != "" {
-			jState, jSummary, err := dispatch.DetectClaudeActivity(worktreePath)
-			if err == nil && jState != dispatch.PaneEmpty {
-				// JSONL gave a definitive answer.
-				state = jState
-				jsonlSummary = jSummary
-				usedJSONL = true
+			jState, jSummary, err := ag.DetectActivity(worktreePath)
+			if err == nil && dispatch.PaneState(jState) != dispatch.PaneEmpty {
+				// Agent detection gave a definitive answer.
+				state = dispatch.PaneState(jState)
+				agentSummary = jSummary
+				usedAgentDetect = true
 			}
-			if err == nil && jState == dispatch.PaneEmpty {
-				jsonlSummary = jSummary // keep summary even if inconclusive
+			if err == nil && dispatch.PaneState(jState) == dispatch.PaneEmpty {
+				agentSummary = jSummary // keep summary even if inconclusive
 			}
 		}
 
 		// Always check capture-pane for permission dialog detection,
 		// or as primary detection if JSONL is unavailable.
+		// Always check capture-pane for permission dialog detection,
+		// or as primary detection if agent detection is unavailable.
 		captured, captureErr := app.term.CapturePane(wsID, 200)
 		if captureErr != nil {
 			// Check if pane is still alive.
@@ -354,8 +361,8 @@ func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.D
 			if aliveErr != nil || !alive {
 				return fmt.Errorf("tmux session for %q died during dispatch", wsID)
 			}
-			if !usedJSONL {
-				// No JSONL and no capture — transient error, keep polling.
+			if !usedAgentDetect {
+				// No agent detection and no capture — transient error, keep polling.
 				<-ticker.C
 				continue
 			}
@@ -367,8 +374,8 @@ func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.D
 			if capState == dispatch.PaneBlocked {
 				state = dispatch.PaneBlocked
 			}
-			// If JSONL wasn't available, fall back to capture-pane state entirely.
-			if !usedJSONL {
+			// If agent detection wasn't available, fall back to capture-pane state entirely.
+			if !usedAgentDetect {
 				state = capState
 			}
 		}
@@ -377,8 +384,8 @@ func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.D
 			sawWorking = true
 		}
 		if state == dispatch.PaneIdle && sawWorking {
-			// Claude finished — extract summary from JSONL or capture-pane.
-			summary := jsonlSummary
+			// Agent finished — extract summary from agent detection or capture-pane.
+			summary := agentSummary
 			if summary == "" && captureErr == nil {
 				summary = truncate(dispatch.ExtractLastResponse(captured), 200)
 			}
@@ -423,11 +430,11 @@ func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.D
 					"summary":      summary,
 				})
 			}
-			fmt.Printf("✓ %s %s: %s\n", wsID, dispatchID, summary)
+			fmt.Printf("completed %s %s: %s\n", wsID, dispatchID, summary)
 			return nil
 		}
 
-		// Check if Claude is blocked on a permission dialog.
+		// Check if agent is blocked on a permission dialog.
 		if state == dispatch.PaneBlocked && sawWorking {
 			dialogCtx := "permission dialog active"
 			if captureErr == nil {
@@ -442,7 +449,7 @@ func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.D
 					"hint":         "towr send " + wsID + " --approve",
 				})
 			}
-			fmt.Fprintf(os.Stderr, "⚠ %s %s: %s\n  Run: towr send %s --approve\n", wsID, dispatchID, dialogCtx, wsID)
+			fmt.Fprintf(os.Stderr, "blocked %s %s: %s\n  Run: towr send %s --approve\n", wsID, dispatchID, dialogCtx, wsID)
 			return nil
 		}
 
