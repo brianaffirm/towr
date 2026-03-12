@@ -103,7 +103,7 @@
     if (!hasAny) {
       html = '<div class="empty-state">No workspaces found.</div>';
     }
-    document.getElementById("sidebar").innerHTML = html;
+    document.getElementById("zones").innerHTML = html;
 
     document.querySelectorAll(".card").forEach(function(el) {
       el.addEventListener("click", function() { openTerminal(el.getAttribute("data-id")); });

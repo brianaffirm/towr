@@ -4,28 +4,45 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>towr — dashboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='14' y='4' width='4' height='24' rx='1' fill='%2358a6ff'/><rect x='10' y='10' width='4' height='18' rx='1' fill='%2358a6ff' opacity='.6'/><rect x='18' y='10' width='4' height='18' rx='1' fill='%2358a6ff' opacity='.6'/><circle cx='16' cy='4' r='2' fill='%233fb950'/></svg>">
 <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+
 <header>
   <h1>towr</h1>
-  <span class="header-meta"><span class="dot"></span>live &middot; refreshing every 5s</span>
+  <div id="statsBar" class="stats-bar"
+    style="border:0;background:none;padding:0;margin:0"></div>
+  <span class="header-meta">
+    <span class="dot" id="live-indicator"></span>
+    Live
+  </span>
 </header>
-<div class="stats-bar" id="statsBar"></div>
+
 <div class="layout">
-  <div class="sidebar" id="sidebar"></div>
-  <div class="terminal-panel" id="termPanel">
+  <main class="sidebar" id="zones">
+    <!-- Attention zones rendered by JS -->
+  </main>
+
+  <aside class="terminal-panel" id="termPanel">
     <div class="terminal-header">
       <span id="termTitle">terminal</span>
       <button class="terminal-close" id="termClose">close</button>
     </div>
-    <div class="terminal-body" id="termBody"></div>
-  </div>
+    <pre class="terminal-body" id="termBody"></pre>
+  </aside>
 </div>
-<div class="activity-log">
-  <div class="activity-toggle" id="actToggle"><span><span class="arrow">&#9654;</span>Activity Log <span id="actCount"></span></span></div>
+
+<div class="activity-log" id="activity-drawer">
+  <div class="activity-toggle" id="actToggle">
+    <span>
+      <span class="arrow">&#9654;</span>
+      Activity <span id="actCount"></span>
+    </span>
+  </div>
   <div class="activity-feed" id="actFeed"></div>
 </div>
+
 <script src="/static/js/app.js"></script>
 </body>
 </html>
