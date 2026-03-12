@@ -37,9 +37,9 @@
   }
 
   function shieldInfo(s) {
-    if (s.bypasses > 0) return { icon: "\uD83D\uDFE0", color: "#f85149", label: "bypass detected" };
-    if (s.approvals > 0) return { icon: "\uD83D\uDFE1", color: "#d29922", label: s.approvals + " auto-approval" + (s.approvals > 1 ? "s" : "") };
-    return { icon: "\uD83D\uDFE2", color: "#3fb950", label: "fully sandboxed" };
+    if (s.bypasses > 0) return { icon: "\uD83D\uDEE1\uFE0F", color: "#f85149", label: "bypass detected" };
+    if (s.approvals > 0) return { icon: "\uD83D\uDEE1\uFE0F", color: "#d29922", label: s.approvals + " approval" + (s.approvals > 1 ? "s" : "") };
+    return { icon: "\uD83D\uDEE1\uFE0F", color: "#3fb950", label: "sandboxed" };
   }
 
   function updateShield(id, s) {
@@ -47,9 +47,12 @@
     if (!el) return;
     var info = shieldInfo(s);
     el.style.color = info.color;
-    el.innerHTML = info.icon + '<span class="shield-tooltip">' + esc(info.label) +
-      (s.approvals ? '<br>approvals: ' + s.approvals : '') +
-      (s.bypasses ? '<br>bypasses: ' + s.bypasses : '') + '</span>';
+    var details = esc(info.label);
+    if (s.approvals) details += ' · ' + s.approvals + ' approved';
+    if (s.bypasses) details += ' · ' + s.bypasses + ' bypass';
+    el.style.color = info.color;
+    el.title = 'agent: ' + (s.agent || 'unknown') + '\nsandbox: ' + (s.sandbox || 'unknown') + '\napprovals: ' + (s.approvals || 0) + '\nbypasses: ' + (s.bypasses || 0);
+    el.innerHTML = info.icon + ' <span class="shield-label" style="color:' + info.color + '">' + details + '</span>';
   }
 
   function renderStats(data) {
@@ -134,10 +137,17 @@
     if (!hasAny) {
       html = '<div class="empty-state">No workspaces found.</div>';
     }
-    document.getElementById("sidebar").innerHTML = html;
+    // Only rebuild DOM if content actually changed (prevents flicker and interaction loss).
+    var sidebar = document.getElementById("sidebar");
+    if (sidebar._lastHTML !== html) {
+      sidebar._lastHTML = html;
+      sidebar.innerHTML = html;
+    }
 
     document.querySelectorAll(".card").forEach(function(el) {
-      el.addEventListener("click", function() {
+      el.addEventListener("click", function(e) {
+        // Don't open terminal when clicking on shield, buttons, or inputs
+        if (e.target.closest(".shield, .shield-label, button, input")) return;
         var id = el.getAttribute("data-id");
         window.activeTerminalId = id;
         window.openTerminal(id, id);

@@ -121,14 +121,9 @@ header h1 { font-size: 1.1rem; color: #58a6ff; font-weight: 600; }
 .btn-ghost:hover { color: #c9d1d9; border-color: #484f58; }
 
 /* Safety shield on cards */
-.shield { cursor: pointer; font-size: 0.75rem; margin-left: 0.4rem; position: relative; }
-.shield-tooltip {
-  display: none; position: absolute; top: 1.4rem; right: 0; z-index: 10;
-  background: #1c2128; border: 1px solid #30363d; border-radius: 4px;
-  padding: 0.4rem 0.6rem; font-size: 0.65rem; color: #c9d1d9;
-  white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-}
-.shield:hover .shield-tooltip { display: block; }
+.shield { cursor: pointer; font-size: 0.85rem; margin-left: 0.5rem; position: relative; display: inline-flex; align-items: center; gap: 0.3rem; }
+.shield-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.9; }
+/* Shield tooltip uses native title attribute — no custom CSS needed */
 
 /* Safety stat pulse */
 @keyframes pulse-red { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
