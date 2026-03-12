@@ -240,7 +240,7 @@ var dashboardTmpl = template.Must(template.New("dashboard").Parse(`<!DOCTYPE htm
   .header-meta .dot { display: inline-block; width: 6px; height: 6px;
     border-radius: 50%; background: #3fb950; margin-right: 4px; vertical-align: middle; }
 
-  .layout { display: flex; height: calc(100vh - 53px); }
+  .layout { display: flex; height: calc(100vh - 88px); }
   .sidebar { flex: 1; overflow-y: auto; padding: 1rem; min-width: 0; }
   .terminal-panel {
     width: 0; overflow: hidden; border-left: 1px solid #21262d;
@@ -286,6 +286,16 @@ var dashboardTmpl = template.Must(template.New("dashboard").Parse(`<!DOCTYPE htm
   .card-details { display: flex; gap: 1rem; font-size: 0.7rem; color: #8b949e; flex-wrap: wrap; }
   .card-details .label { color: #484f58; }
 
+  .stats-bar {
+    display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1.5rem;
+    border-bottom: 1px solid #21262d; background: #161b22; flex-wrap: wrap;
+  }
+  .stat-pill {
+    font-size: 0.7rem; font-weight: 600; padding: 3px 10px; border-radius: 10px;
+    letter-spacing: 0.03em; white-space: nowrap;
+  }
+  .stat-meta { font-size: 0.65rem; color: #484f58; margin-left: auto; white-space: nowrap; }
+
   .empty-state { text-align: center; color: #484f58; padding: 4rem 1rem; font-size: 0.85rem; }
 
   .activity-log { border-top: 1px solid #21262d; background: #161b22; }
@@ -323,6 +333,7 @@ var dashboardTmpl = template.Must(template.New("dashboard").Parse(`<!DOCTYPE htm
   <h1>towr</h1>
   <span class="header-meta"><span class="dot"></span>live &middot; refreshing every 5s</span>
 </header>
+<div class="stats-bar" id="statsBar"></div>
 <div class="layout">
   <div class="sidebar" id="sidebar"></div>
   <div class="terminal-panel" id="termPanel">
@@ -369,7 +380,33 @@ var dashboardTmpl = template.Must(template.New("dashboard").Parse(`<!DOCTYPE htm
     return d.innerHTML;
   }
 
+  var startTime = new Date();
+
+  function renderStats(data) {
+    var total = (data || []).length;
+    var working = 0, idle = 0, blocked = 0;
+    (data || []).forEach(function(ws) {
+      var s = (ws.status||"").toUpperCase();
+      if (s === "RUNNING" || s === "SPAWNED") working++;
+      else if (s === "BLOCKED" || s === "FAILED" || s === "ERROR" || s === "STALE" || s === "ORPHANED") blocked++;
+      else idle++;
+    });
+    var now = new Date();
+    var uptimeSec = Math.floor((now - startTime) / 1000);
+    var uptimeMin = Math.floor(uptimeSec / 60);
+    var uptimeStr = uptimeMin > 0 ? uptimeMin + "m " + (uptimeSec % 60) + "s" : uptimeSec + "s";
+    var timeStr = now.toLocaleTimeString();
+    var bar = document.getElementById("statsBar");
+    bar.innerHTML =
+      '<span class="stat-pill" style="color:#c9d1d9;background:#30363d">' + total + ' total</span>' +
+      '<span class="stat-pill" style="color:#58a6ff;background:#58a6ff22">' + working + ' working</span>' +
+      '<span class="stat-pill" style="color:#8b949e;background:#8b949e22">' + idle + ' idle</span>' +
+      '<span class="stat-pill" style="color:#f85149;background:#f8514922">' + blocked + ' blocked</span>' +
+      '<span class="stat-meta">uptime ' + esc(uptimeStr) + ' &middot; refreshed ' + esc(timeStr) + '</span>';
+  }
+
   function render(data) {
+    renderStats(data);
     var groups = { working: [], attention: [], completed: [] };
     (data || []).forEach(function(ws) { groups[zone(ws.status)].push(ws); });
 
