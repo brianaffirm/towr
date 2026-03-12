@@ -217,7 +217,9 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 	// Select agent based on workspace metadata.
 	ag := agent.Get(sw.AgentRuntime)
 
-	paneState := dispatch.DetectPaneState(captured)
+	// Check if agent is already running and idle using agent-specific patterns.
+	lastActivity := app.term.PaneLastActivity(wsID)
+	paneState := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 15*time.Second)
 	if paneState != dispatch.PaneIdle {
 		// Acquire launch lock to prevent concurrent agent startups.
 		unlock, err := dispatch.AcquireLaunchLock()
@@ -373,7 +375,7 @@ func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.D
 		// If capture-pane succeeded, check for blocked/idle using agent-specific patterns.
 		if captureErr == nil {
 			lastActivity := app.term.PaneLastActivity(wsID)
-			capState := dispatch.DetectPaneStateWithActivity(captured, lastActivity, 15*time.Second)
+			capState := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 15*time.Second)
 			if capState == dispatch.PaneBlocked {
 				state = dispatch.PaneBlocked
 			}
