@@ -131,40 +131,11 @@
   }
 
 
-  var EVENT_COLORS = {
-    "task.completed": "#3fb950", "task.failed": "#f85149",
-    "task.dispatched": "#58a6ff", "task.blocked": "#d29922"
-  };
-
-  document.getElementById("actToggle").addEventListener("click", function() {
-    this.classList.toggle("open");
-    document.getElementById("actFeed").classList.toggle("open");
-  });
-
-  function renderEvents(events) {
-    var feed = document.getElementById("actFeed");
-    var countEl = document.getElementById("actCount");
-    countEl.textContent = "(" + (events||[]).length + " events)";
-    var html = "";
-    (events||[]).forEach(function(ev) {
-      var ts = new Date(ev.ts).toLocaleTimeString();
-      var c = EVENT_COLORS[ev.kind] || "#8b949e";
-      var summary = "";
-      if (ev.data && ev.data.summary) summary = ev.data.summary;
-      else if (ev.data && ev.data.message) summary = ev.data.message;
-      html += '<div class="evt-row">';
-      html += '<span class="evt-ts">' + esc(ts) + '</span>';
-      html += '<span class="evt-ws">' + esc(ev.workspace_id||"-") + '</span>';
-      html += '<span class="evt-kind" style="color:' + c + '">' + esc(ev.kind) + '</span>';
-      html += '<span>' + esc(summary) + '</span>';
-      html += '</div>';
-    });
-    feed.innerHTML = html;
-  }
-
   function poll() {
     fetch("/api/workspaces").then(function(r) { return r.json(); }).then(render).catch(function() {});
-    fetch("/api/events").then(function(r) { return r.json(); }).then(renderEvents).catch(function() {});
+    fetch("/api/events").then(function(r) { return r.json(); }).then(function(events) {
+      if (typeof renderActivity === "function") renderActivity(events);
+    }).catch(function() {});
     setTimeout(poll, 5000);
   }
   poll();

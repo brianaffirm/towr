@@ -104,6 +104,13 @@ header h1 { font-size: 1.1rem; color: #58a6ff; font-weight: 600; }
 .evt-ts { color: #484f58; white-space: nowrap; }
 .evt-ws { font-weight: 600; color: #58a6ff; }
 .evt-kind { font-weight: 600; }
+.evt-dot { font-size: 0.5rem; flex-shrink: 0; }
+.evt-desc { color: #c9d1d9; }
+.evt-new { animation: evt-flash 1s ease-out; }
+@keyframes evt-flash {
+  0% { background: #30363d; }
+  100% { background: transparent; }
+}
 
 @media (max-width: 768px) {
   .layout { flex-direction: column; }
