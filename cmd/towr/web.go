@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/csv"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -122,6 +123,12 @@ func newWebCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comma
 					http.Error(w, err.Error(), 500)
 					return
 				}
+
+				// Filter by ?type= query param.
+				if typeFilter := r.URL.Query().Get("type"); typeFilter != "" {
+					events = filterEventsByType(events, typeFilter)
+				}
+
 				// Take the last 50 (newest) and reverse to newest-first.
 				if len(events) > 50 {
 					events = events[len(events)-50:]
@@ -131,6 +138,69 @@ func newWebCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comma
 				}
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(events)
+			})
+
+			mux.HandleFunc("/api/workspace/", func(w http.ResponseWriter, r *http.Request) {
+				// Expect /api/workspace/{id}/safety
+				rest := strings.TrimPrefix(r.URL.Path, "/api/workspace/")
+				if !strings.HasSuffix(rest, "/safety") {
+					http.NotFound(w, r)
+					return
+				}
+				id := strings.TrimSuffix(rest, "/safety")
+				if id == "" {
+					http.Error(w, "missing workspace id", 400)
+					return
+				}
+				if app == nil {
+					http.Error(w, "store not available", 500)
+					return
+				}
+
+				events, err := app.store.QueryEvents(store.EventQuery{WorkspaceID: id})
+				if err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+
+				summary := buildSafetySummary(id, events)
+
+				// Try to enrich with workspace metadata.
+				if ws, err := app.store.GetWorkspace(app.repoRoot, id); err == nil && ws != nil {
+					summary.Agent = ws.AgentRuntime
+					summary.FilesChanged = countFilesChanged(ws)
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(summary)
+			})
+
+			mux.HandleFunc("/api/audit/export", func(w http.ResponseWriter, r *http.Request) {
+				if app == nil {
+					http.Error(w, "store not available", 500)
+					return
+				}
+
+				query := store.EventQuery{RepoRoot: app.repoRoot}
+
+				if sinceParam := r.URL.Query().Get("since"); sinceParam != "" {
+					t, err := parseSinceFlag(sinceParam)
+					if err != nil {
+						http.Error(w, fmt.Sprintf("invalid since param: %v", err), 400)
+						return
+					}
+					query.Since = &t
+				}
+
+				events, err := app.store.QueryEvents(query)
+				if err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+
+				w.Header().Set("Content-Type", "text/csv")
+				w.Header().Set("Content-Disposition", "attachment; filename=towr-audit.csv")
+				writeCSVTo(w, events)
 			})
 
 			mux.HandleFunc("/stream/", func(w http.ResponseWriter, r *http.Request) {
@@ -279,5 +349,89 @@ func formatDiffPlain(added, removed int) string {
 		return "-"
 	}
 	return fmt.Sprintf("+%d / -%d", added, removed)
+}
+
+// filterEventsByType filters events by a safety-related type category.
+func filterEventsByType(events []Event, typ string) []Event {
+	var out []Event
+	for _, e := range events {
+		lower := strings.ToLower(e.Kind)
+		switch typ {
+		case "approval":
+			if strings.Contains(lower, "approved") || strings.Contains(lower, "blocked") || strings.Contains(lower, "bypass") {
+				out = append(out, e)
+			}
+		case "bypass":
+			if strings.Contains(lower, "forced") || strings.Contains(lower, "hooks_skipped") {
+				out = append(out, e)
+			}
+		}
+	}
+	return out
+}
+
+type safetySummary struct {
+	WorkspaceID  string `json:"workspace_id"`
+	Agent        string `json:"agent"`
+	Sandbox      string `json:"sandbox"`
+	Approvals    int    `json:"approvals"`
+	Blocks       int    `json:"blocks"`
+	Bypasses     int    `json:"bypasses"`
+	FilesChanged int    `json:"files_changed"`
+	SafetyLevel  string `json:"safety_level"`
+}
+
+// buildSafetySummary computes safety metrics from workspace events.
+func buildSafetySummary(wsID string, events []Event) safetySummary {
+	s := safetySummary{
+		WorkspaceID: wsID,
+		Sandbox:     "allowlist",
+	}
+	for _, e := range events {
+		lower := strings.ToLower(e.Kind)
+		switch {
+		case strings.Contains(lower, "forced") || strings.Contains(lower, "hooks_skipped"):
+			s.Bypasses++
+		case strings.Contains(lower, "blocked"):
+			s.Blocks++
+		case strings.Contains(lower, "approved") || strings.Contains(lower, "resolved"):
+			s.Approvals++
+		}
+	}
+
+	switch {
+	case s.Bypasses > 0:
+		s.SafetyLevel = "red"
+	case s.Approvals > 0:
+		s.SafetyLevel = "yellow"
+	default:
+		s.SafetyLevel = "green"
+	}
+	return s
+}
+
+// countFilesChanged returns a rough file count from workspace diff stats.
+func countFilesChanged(ws *store.Workspace) int {
+	if ws.RepoRoot == "" || ws.BaseBranch == "" || ws.Branch == "" {
+		return 0
+	}
+	added, removed := getDiffCounts(ws.RepoRoot, ws.BaseBranch, ws.Branch)
+	return added + removed
+}
+
+// writeCSVTo writes audit events as CSV to an io.Writer.
+func writeCSVTo(w http.ResponseWriter, events []Event) {
+	cw := csv.NewWriter(w)
+	cw.Write([]string{"timestamp", "workspace_id", "kind", "actor", "data"})
+	for _, e := range events {
+		cw.Write([]string{
+			e.Timestamp.Format(time.RFC3339),
+			e.WorkspaceID,
+			formatKind(e.Kind),
+			e.Actor,
+			dataSummary(e.Data),
+		})
+	}
+	cw.Flush()
 }
 
