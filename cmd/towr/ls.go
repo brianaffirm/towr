@@ -137,6 +137,30 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 				return nil
 			}
 
+			// Compute per-workspace overlap counts (repo-scoped only).
+			// Use a set per workspace to avoid counting the same file multiple times
+			// when it overlaps with multiple peers.
+			overlapCounts := make(map[string]int)
+			if !showRepoColumn {
+				overlapFiles := make(map[string]map[string]bool) // wsID → set of files
+				pairs := workspace.DetectOverlaps(workspaces)
+				for _, p := range pairs {
+					if overlapFiles[p.WorkspaceA] == nil {
+						overlapFiles[p.WorkspaceA] = make(map[string]bool)
+					}
+					if overlapFiles[p.WorkspaceB] == nil {
+						overlapFiles[p.WorkspaceB] = make(map[string]bool)
+					}
+					for _, f := range p.Files {
+						overlapFiles[p.WorkspaceA][f] = true
+						overlapFiles[p.WorkspaceB][f] = true
+					}
+				}
+				for wsID, files := range overlapFiles {
+					overlapCounts[wsID] = len(files)
+				}
+			}
+
 			columns := []cli.Column{
 				{Header: "ID", Width: 14},
 				{Header: "STATUS", Width: 10},
@@ -144,6 +168,7 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 				{Header: "HEALTH", Width: 8},
 				{Header: "ACTIVITY", Width: 10},
 				{Header: "DRIFT", Width: 6},
+				{Header: "OVERLAP", Width: 8},
 				{Header: "DIFF", Width: 10},
 				{Header: "TREE", Width: 10},
 				{Header: "AGENT", Width: 8},
@@ -231,6 +256,15 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 
 				age := cli.FormatAgeFromString(ws.CreatedAt)
 
+				// Overlap.
+				overlapStr := "-"
+				if !showRepoColumn {
+					overlapStr = "\033[2mclean\033[0m"
+					if n := overlapCounts[ws.ID]; n > 0 {
+						overlapStr = fmt.Sprintf("⚠ %d", n)
+					}
+				}
+
 				row := []string{
 					ws.ID,
 					statusStr,
@@ -238,6 +272,7 @@ func newLsCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comman
 					healthStr,
 					activityStr,
 					driftStr,
+					overlapStr,
 					diffStr,
 					treeStr,
 					agentStr,
