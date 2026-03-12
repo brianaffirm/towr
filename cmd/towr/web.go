@@ -13,7 +13,6 @@ import (
 
 	"github.com/brianaffirm/towr/internal/cli"
 	"github.com/brianaffirm/towr/internal/config"
-	"github.com/brianaffirm/towr/internal/git"
 	"github.com/brianaffirm/towr/internal/store"
 	"github.com/brianaffirm/towr/internal/terminal"
 	"github.com/brianaffirm/towr/internal/workspace"
@@ -352,28 +351,18 @@ func formatDiffPlain(added, removed int) string {
 	return fmt.Sprintf("+%d / -%d", added, removed)
 }
 
-// isApprovalEvent returns true if the event kind is approval-related
-// (queue resolution, blocks, or bypass events).
-func isApprovalEvent(kind string) bool {
-	lower := strings.ToLower(kind)
-	return strings.Contains(lower, "approved") ||
-		strings.Contains(lower, "blocked") ||
-		strings.Contains(lower, "resolved") ||
-		strings.Contains(lower, "queue.") ||
-		isBypassEvent(kind)
-}
-
 // filterEventsByType filters events by a safety-related type category.
 func filterEventsByType(events []Event, typ string) []Event {
 	var out []Event
 	for _, e := range events {
+		lower := strings.ToLower(e.Kind)
 		switch typ {
 		case "approval":
-			if isApprovalEvent(e.Kind) {
+			if strings.Contains(lower, "approved") || strings.Contains(lower, "blocked") || strings.Contains(lower, "bypass") {
 				out = append(out, e)
 			}
 		case "bypass":
-			if isBypassEvent(e.Kind) {
+			if strings.Contains(lower, "forced") || strings.Contains(lower, "hooks_skipped") {
 				out = append(out, e)
 			}
 		}
@@ -421,20 +410,13 @@ func buildSafetySummary(wsID string, events []Event) safetySummary {
 	return s
 }
 
-// countFilesChanged returns the number of files changed between base and branch.
+// countFilesChanged returns a rough file count from workspace diff stats.
 func countFilesChanged(ws *store.Workspace) int {
 	if ws.RepoRoot == "" || ws.BaseBranch == "" || ws.Branch == "" {
 		return 0
 	}
-	out, err := git.RunGit(ws.RepoRoot, "diff", "--name-only", ws.BaseBranch+"..."+ws.Branch)
-	if err != nil {
-		return 0
-	}
-	out = strings.TrimSpace(out)
-	if out == "" {
-		return 0
-	}
-	return len(strings.Split(out, "\n"))
+	added, removed := getDiffCounts(ws.RepoRoot, ws.BaseBranch, ws.Branch)
+	return added + removed
 }
 
 // writeCSVTo writes audit events as CSV to an io.Writer.

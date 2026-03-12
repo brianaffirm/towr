@@ -27,6 +27,30 @@
   }
 
   var startTime = new Date();
+  var safetyCache = {};
+
+  function fetchSafety(id) {
+    fetch("/api/workspace/" + encodeURIComponent(id) + "/safety")
+      .then(function(r) { return r.json(); })
+      .then(function(s) { safetyCache[id] = s; updateShield(id, s); })
+      .catch(function() {});
+  }
+
+  function shieldInfo(s) {
+    if (s.bypasses > 0) return { icon: "\uD83D\uDFE0", color: "#f85149", label: "bypass detected" };
+    if (s.approvals > 0) return { icon: "\uD83D\uDFE1", color: "#d29922", label: s.approvals + " auto-approval" + (s.approvals > 1 ? "s" : "") };
+    return { icon: "\uD83D\uDFE2", color: "#3fb950", label: "fully sandboxed" };
+  }
+
+  function updateShield(id, s) {
+    var el = document.querySelector('[data-shield="' + id + '"]');
+    if (!el) return;
+    var info = shieldInfo(s);
+    el.style.color = info.color;
+    el.innerHTML = info.icon + '<span class="shield-tooltip">' + esc(info.label) +
+      (s.approvals ? '<br>approvals: ' + s.approvals : '') +
+      (s.bypasses ? '<br>bypasses: ' + s.bypasses : '') + '</span>';
+  }
 
   function renderStats(data) {
     var total = (data || []).length;
@@ -42,12 +66,21 @@
     var uptimeMin = Math.floor(uptimeSec / 60);
     var uptimeStr = uptimeMin > 0 ? uptimeMin + "m " + (uptimeSec % 60) + "s" : uptimeSec + "s";
     var timeStr = now.toLocaleTimeString();
+    var totalApprovals = 0, totalBypasses = 0;
+    Object.keys(safetyCache).forEach(function(k) {
+      totalApprovals += (safetyCache[k].approvals || 0);
+      totalBypasses += (safetyCache[k].bypasses || 0);
+    });
+    var bypassColor = totalBypasses > 0 ? "#f85149" : "#3fb950";
+    var bypassClass = totalBypasses > 0 ? ' stat-pulse' : '';
     var bar = document.getElementById("statsBar");
     bar.innerHTML =
       '<span class="stat-pill" style="color:#c9d1d9;background:#30363d">' + total + ' total</span>' +
       '<span class="stat-pill" style="color:#58a6ff;background:#58a6ff22">' + working + ' working</span>' +
       '<span class="stat-pill" style="color:#8b949e;background:#8b949e22">' + idle + ' idle</span>' +
       '<span class="stat-pill" style="color:#f85149;background:#f8514922">' + blocked + ' blocked</span>' +
+      '<span class="stat-pill" style="color:#3fb950;background:#3fb95022">' + totalApprovals + ' approvals</span>' +
+      '<span class="stat-pill' + bypassClass + '" style="color:' + bypassColor + ';background:' + bypassColor + '22">' + totalBypasses + ' bypasses</span>' +
       '<span class="stat-meta">uptime ' + esc(uptimeStr) + ' &middot; refreshed ' + esc(timeStr) + '</span>';
   }
 
@@ -78,6 +111,7 @@
         html += '<div class="card' + (isActive ? ' active' : '') + '" data-id="' + esc(ws.id) + '">';
         html += '<div class="card-top">';
         html += '<span class="card-id">' + esc(ws.id) + '</span>';
+        html += '<span class="shield" data-shield="' + esc(ws.id) + '"></span>';
         html += '<span class="badge" style="color:' + esc(c) + ';background:' + badgeBg(c) + '">' + esc(ws.status) + '</span>';
         html += '</div>';
         html += '<div class="card-details">';
@@ -115,6 +149,8 @@
         fetch("/api/workspaces/" + encodeURIComponent(btn.getAttribute("data-approve")) + "/approve", {method:"POST"});
       });
     });
+    // Fetch safety status for each workspace
+    (data || []).forEach(function(ws) { fetchSafety(ws.id); });
     document.querySelectorAll("[data-send]").forEach(function(btn) {
       btn.addEventListener("click", function(e) {
         e.stopPropagation();
@@ -130,6 +166,11 @@
     });
   }
 
+
+  // Export audit CSV
+  document.getElementById("exportAudit").addEventListener("click", function() {
+    window.location.href = "/api/audit/export?format=csv&since=168h";
+  });
 
   function poll() {
     fetch("/api/workspaces").then(function(r) { return r.json(); }).then(render).catch(function() {});

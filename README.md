@@ -428,15 +428,19 @@ towr web --addr :9000       # custom port
 ```
 
 - **Workspace cards** grouped by attention zone: Working (blue), Needs Attention (red), Completed (green)
+- **Safety shields** on each card — green (fully sandboxed), yellow (auto-approvals used), red (bypass detected). Hover for approval/bypass counts.
 - **Live terminal view** — click any card to stream its tmux output in real-time
-- **Activity feed** — reverse-chronological event log with color-coded entries
-- **Stats bar** — total/working/blocked/completed counts at a glance
+- **Activity feed** — reverse-chronological event log with color-coded entries. Approvals show green checkmarks, blocks show red X, bypasses get a red left-border and `[BYPASS]` tag.
+- **Stats bar** — total/working/blocked/completed counts, plus total approvals and bypasses (red pulsing when bypasses > 0)
+- **Export Audit** — one-click CSV download of the last 7 days of audit events
 - **Action buttons** — approve permission dialogs and send messages from the browser
 - **Auto-refresh** every 5s, dark theme, responsive, zero external dependencies
 
 API endpoints:
 - `GET /api/workspaces` — JSON workspace list for scripting
-- `GET /api/events` — recent audit events
+- `GET /api/events` — recent audit events (supports `?type=approval` or `?type=bypass` filtering)
+- `GET /api/workspace/<id>/safety` — per-workspace safety summary (level, approval count, bypass count)
+- `GET /api/audit/export?format=csv&since=168h` — CSV audit trail export
 - `GET /api/stream/<id>` — SSE live terminal output
 - `POST /api/workspaces/<id>/approve` — approve permission dialog
 - `POST /api/workspaces/<id>/send` — send message to workspace
