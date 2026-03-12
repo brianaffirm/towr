@@ -157,7 +157,8 @@
       html += '<span><span class="label">dispatch</span> ' + esc(ws.dispatch_status) + '</span>';
     }
     html += '<span><span class="label">diff</span> ' + esc(diffStr(ws)) + '</span>';
-    html += '<span><span class="label">age</span> ' + esc(relativeTime(ws.created_at || ws.started_at)) + '</span>';
+    var age = ws.age || relativeTime(ws.created_at || ws.started_at);
+    html += '<span><span class="label">age</span> ' + esc(age) + '</span>';
     html += '</div>';
     if (s === "BLOCKED" || s === "RUNNING" || s === "SPAWNED") {
       html += '<div class="card-actions">';
@@ -321,17 +322,20 @@
 
   // --- polling ---
   async function poll() {
+    var ok = false;
     try {
-      var [wsRes, evRes] = await Promise.all([
-        fetch("/api/workspaces"),
-        fetch("/api/events")
-      ]);
+      var wsRes = await fetch("/api/workspaces");
       var workspaces = await wsRes.json();
-      var events = await evRes.json();
       renderWorkspaces(workspaces || []);
+      ok = true;
+    } catch (_) { /* workspace fetch failed, skip render */ }
+    try {
+      var evRes = await fetch("/api/events");
+      var events = await evRes.json();
       renderEvents(events || []);
-      pulseDot();
-    } catch (_) { /* silent retry next tick */ }
+      ok = true;
+    } catch (_) { /* events fetch failed, skip render */ }
+    if (ok) pulseDot();
     setTimeout(poll, POLL_MS);
   }
   poll();
