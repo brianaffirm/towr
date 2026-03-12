@@ -33,13 +33,8 @@ func newWebCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comma
 					http.NotFound(w, r)
 					return
 				}
-				rows, err := collectWorkspaces(app, appErr)
-				if err != nil {
-					http.Error(w, err.Error(), 500)
-					return
-				}
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				if err := dashboardTmpl.Execute(w, rows); err != nil {
+				if err := dashboardTmpl.Execute(w, nil); err != nil {
 					http.Error(w, err.Error(), 500)
 				}
 			})
@@ -202,97 +197,219 @@ func formatDiffPlain(added, removed int) string {
 	return fmt.Sprintf("+%d / -%d", added, removed)
 }
 
-func statusColor(status string) string {
-	s := strings.ToUpper(status)
-	switch {
-	case s == "READY" || s == "MERGED" || s == "LANDED":
-		return "#22c55e"
-	case s == "RUNNING" || s == "SPAWNED":
-		return "#eab308"
-	case s == "BLOCKED" || s == "FAILED" || s == "ERROR":
-		return "#ef4444"
-	case s == "STALE" || s == "ORPHANED":
-		return "#9ca3af"
-	default:
-		return "#d1d5db"
-	}
-}
-
-var dashboardTmpl = template.Must(template.New("dashboard").Funcs(template.FuncMap{
-	"statusColor": statusColor,
-}).Parse(`<!DOCTYPE html>
-<html>
+var dashboardTmpl = template.Must(template.New("dashboard").Parse(`<!DOCTYPE html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>towr — workspace dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>towr — dashboard</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: ui-monospace, "SF Mono", Menlo, monospace; background: #0f172a; color: #e2e8f0; padding: 2rem; }
-  h1 { font-size: 1.25rem; margin-bottom: 1rem; color: #94a3b8; }
-  table { border-collapse: collapse; width: 100%; }
-  th { text-align: left; padding: 0.5rem 1rem; color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #1e293b; }
-  td { padding: 0.5rem 1rem; border-bottom: 1px solid #1e293b; font-size: 0.875rem; }
-  tr:hover { background: #1e293b; }
-  .status { font-weight: 600; }
-  .empty { color: #475569; text-align: center; padding: 2rem; }
-  .refresh-note { color: #475569; font-size: 0.75rem; margin-top: 1rem; }
-  a { color: #38bdf8; text-decoration: none; }
-  a:hover { text-decoration: underline; }
+  body {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    background: #0d1117; color: #c9d1d9; min-height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem 1.5rem; border-bottom: 1px solid #21262d;
+  }
+  header h1 { font-size: 1.1rem; color: #58a6ff; font-weight: 600; }
+  .header-meta { font-size: 0.7rem; color: #484f58; }
+  .header-meta .dot { display: inline-block; width: 6px; height: 6px;
+    border-radius: 50%; background: #3fb950; margin-right: 4px; vertical-align: middle; }
+
+  .layout { display: flex; height: calc(100vh - 53px); }
+  .sidebar { flex: 1; overflow-y: auto; padding: 1rem; min-width: 0; }
+  .terminal-panel {
+    width: 0; overflow: hidden; border-left: 1px solid #21262d;
+    background: #010409; transition: width 0.2s ease; display: flex; flex-direction: column;
+  }
+  .terminal-panel.open { width: 45%; min-width: 320px; }
+  .terminal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.6rem 1rem; border-bottom: 1px solid #21262d; background: #161b22;
+  }
+  .terminal-header span { font-size: 0.8rem; color: #58a6ff; }
+  .terminal-close {
+    background: none; border: 1px solid #30363d; color: #8b949e;
+    border-radius: 4px; padding: 2px 8px; cursor: pointer; font-family: inherit; font-size: 0.75rem;
+  }
+  .terminal-close:hover { color: #c9d1d9; border-color: #484f58; }
+  .terminal-body {
+    flex: 1; overflow-y: auto; padding: 0.75rem; font-size: 0.75rem;
+    line-height: 1.4; white-space: pre-wrap; color: #8b949e;
+  }
+
+  .zone { margin-bottom: 1.5rem; }
+  .zone-title {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #484f58; margin-bottom: 0.5rem; padding-left: 2px;
+  }
+  .zone-title .count { color: #6e7681; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.6rem; }
+
+  .card {
+    background: #161b22; border: 1px solid #21262d; border-radius: 6px;
+    padding: 0.75rem 1rem; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  }
+  .card:hover { border-color: #30363d; background: #1c2128; }
+  .card.active { border-color: #58a6ff; }
+  .card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
+  .card-id { font-size: 0.85rem; font-weight: 600; color: #c9d1d9; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
+  .badge {
+    font-size: 0.65rem; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+    text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+  }
+  .card-details { display: flex; gap: 1rem; font-size: 0.7rem; color: #8b949e; flex-wrap: wrap; }
+  .card-details .label { color: #484f58; }
+
+  .empty-state { text-align: center; color: #484f58; padding: 4rem 1rem; font-size: 0.85rem; }
+
+  @media (max-width: 768px) {
+    .layout { flex-direction: column; }
+    .terminal-panel.open { width: 100%; min-width: 0; height: 50%; }
+    .sidebar { flex: none; height: 50%; }
+    .cards { grid-template-columns: 1fr; }
+    header { padding: 0.75rem 1rem; }
+  }
 </style>
 </head>
 <body>
-<h1>towr workspaces</h1>
-{{if .}}
-<table>
-<thead>
-  <tr><th>ID</th><th>Status</th><th>Task</th><th>Diff</th><th>Age</th><th>Stream</th></tr>
-</thead>
-<tbody>
-{{range .}}
-  <tr>
-    <td>{{.ID}}</td>
-    <td class="status" style="color: {{statusColor .Status}}">{{.Status}}</td>
-    <td>{{.Task}}</td>
-    <td>{{.Diff}}</td>
-    <td>{{.Age}}</td>
-    <td><a href="/stream/{{.ID}}" target="_blank">stream</a></td>
-  </tr>
-{{end}}
-</tbody>
-</table>
-{{else}}
-<p class="empty">No workspaces found.</p>
-{{end}}
-<p class="refresh-note">Auto-refreshes every 5s</p>
+<header>
+  <h1>towr</h1>
+  <span class="header-meta"><span class="dot"></span>live &middot; refreshing every 5s</span>
+</header>
+<div class="layout">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="terminal-panel" id="termPanel">
+    <div class="terminal-header">
+      <span id="termTitle">terminal</span>
+      <button class="terminal-close" id="termClose">close</button>
+    </div>
+    <div class="terminal-body" id="termBody"></div>
+  </div>
+</div>
 <script>
-setTimeout(function refresh() {
-  fetch("/api/workspaces").then(r => r.json()).then(data => {
-    const tbody = document.querySelector("tbody");
-    if (!tbody) { location.reload(); return; }
-    tbody.innerHTML = "";
-    data.forEach(ws => {
-      const tr = document.createElement("tr");
-      const colors = {"READY":"#22c55e","MERGED":"#22c55e","LANDED":"#22c55e","RUNNING":"#eab308","SPAWNED":"#eab308","BLOCKED":"#ef4444","FAILED":"#ef4444","ERROR":"#ef4444","STALE":"#9ca3af","ORPHANED":"#9ca3af"};
-      const c = colors[ws.status.toUpperCase()] || "#d1d5db";
-      const fields = [ws.id, ws.status, ws.task, ws.diff, ws.age];
-      fields.forEach((val, i) => {
-        const td = document.createElement("td");
-        td.textContent = val;
-        if (i === 1) { td.className = "status"; td.style.color = c; }
-        tr.appendChild(td);
+(function() {
+  "use strict";
+  var STATUS_COLORS = {
+    RUNNING: "#58a6ff", SPAWNED: "#58a6ff",
+    READY: "#3fb950", MERGED: "#3fb950", LANDED: "#3fb950",
+    BLOCKED: "#f85149", FAILED: "#f85149", ERROR: "#f85149",
+    STALE: "#8b949e", ORPHANED: "#8b949e", IDLE: "#8b949e"
+  };
+  var DEFAULT_COLOR = "#8b949e";
+
+  function statusColor(s) { return STATUS_COLORS[(s||"").toUpperCase()] || DEFAULT_COLOR; }
+
+  function zone(status) {
+    var s = (status||"").toUpperCase();
+    if (s === "RUNNING" || s === "SPAWNED") return "working";
+    if (s === "BLOCKED" || s === "FAILED" || s === "ERROR" || s === "STALE" || s === "ORPHANED") return "attention";
+    if (s === "READY" || s === "MERGED" || s === "LANDED") return "completed";
+    return "working";
+  }
+
+  function badgeBg(color) { return color + "22"; }
+
+  var activeId = null;
+  var evtSource = null;
+
+  function esc(s) {
+    var d = document.createElement("span");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function render(data) {
+    var groups = { working: [], attention: [], completed: [] };
+    (data || []).forEach(function(ws) { groups[zone(ws.status)].push(ws); });
+
+    var zoneConfig = [
+      { key: "working", title: "Working", color: "#58a6ff" },
+      { key: "attention", title: "Needs Attention", color: "#f85149" },
+      { key: "completed", title: "Completed", color: "#3fb950" }
+    ];
+
+    var html = "";
+    var hasAny = false;
+    zoneConfig.forEach(function(z) {
+      var items = groups[z.key];
+      if (items.length === 0) return;
+      hasAny = true;
+      html += '<div class="zone">';
+      html += '<div class="zone-title" style="color:' + esc(z.color) + '">' + esc(z.title) +
+              ' <span class="count">(' + items.length + ')</span></div>';
+      html += '<div class="cards">';
+      items.forEach(function(ws) {
+        var c = statusColor(ws.status);
+        var isActive = ws.id === activeId;
+        html += '<div class="card' + (isActive ? ' active' : '') + '" data-id="' + esc(ws.id) + '">';
+        html += '<div class="card-top">';
+        html += '<span class="card-id">' + esc(ws.id) + '</span>';
+        html += '<span class="badge" style="color:' + esc(c) + ';background:' + badgeBg(c) + '">' + esc(ws.status) + '</span>';
+        html += '</div>';
+        html += '<div class="card-details">';
+        html += '<span><span class="label">task</span> ' + esc(ws.task) + '</span>';
+        html += '<span><span class="label">diff</span> ' + esc(ws.diff) + '</span>';
+        html += '<span><span class="label">age</span> ' + esc(ws.age) + '</span>';
+        html += '</div></div>';
       });
-      const td = document.createElement("td");
-      const a = document.createElement("a");
-      a.href = "/stream/" + encodeURIComponent(ws.id);
-      a.target = "_blank";
-      a.textContent = "stream";
-      td.appendChild(a);
-      tr.appendChild(td);
-      tbody.appendChild(tr);
+      html += '</div></div>';
     });
-    setTimeout(refresh, 5000);
-  }).catch(() => setTimeout(refresh, 5000));
-}, 5000);
+    if (!hasAny) {
+      html = '<div class="empty-state">No workspaces found.</div>';
+    }
+    document.getElementById("sidebar").innerHTML = html;
+
+    document.querySelectorAll(".card").forEach(function(el) {
+      el.addEventListener("click", function() { openTerminal(el.getAttribute("data-id")); });
+    });
+  }
+
+  function openTerminal(id) {
+    activeId = id;
+    var panel = document.getElementById("termPanel");
+    var body = document.getElementById("termBody");
+    var title = document.getElementById("termTitle");
+    panel.classList.add("open");
+    title.textContent = id;
+    body.textContent = "connecting...";
+
+    if (evtSource) { evtSource.close(); evtSource = null; }
+    evtSource = new EventSource("/stream/" + encodeURIComponent(id));
+    evtSource.onmessage = function(e) {
+      body.textContent = "";
+      var lines = e.data.split("\n");
+      body.textContent = lines.join("\n");
+      body.scrollTop = body.scrollHeight;
+    };
+    evtSource.onerror = function() {
+      body.textContent += "\n[stream disconnected]";
+    };
+
+    document.querySelectorAll(".card").forEach(function(el) {
+      el.classList.toggle("active", el.getAttribute("data-id") === id);
+    });
+  }
+
+  document.getElementById("termClose").addEventListener("click", function() {
+    document.getElementById("termPanel").classList.remove("open");
+    if (evtSource) { evtSource.close(); evtSource = null; }
+    activeId = null;
+    document.querySelectorAll(".card.active").forEach(function(el) { el.classList.remove("active"); });
+  });
+
+  function poll() {
+    fetch("/api/workspaces").then(function(r) { return r.json(); }).then(function(data) {
+      render(data);
+    }).catch(function() {}).finally(function() {
+      setTimeout(poll, 5000);
+    });
+  }
+  poll();
+})();
 </script>
 </body>
 </html>
