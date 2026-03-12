@@ -153,7 +153,6 @@ func writeTable(events []Event) error {
 
 func writeCSV(events []Event) error {
 	w := csv.NewWriter(os.Stdout)
-	defer w.Flush()
 
 	if err := w.Write([]string{"timestamp", "workspace_id", "kind", "actor", "data"}); err != nil {
 		return err
@@ -171,7 +170,9 @@ func writeCSV(events []Event) error {
 			return err
 		}
 	}
-	return nil
+
+	w.Flush()
+	return w.Error()
 }
 
 // Event is a type alias to avoid repeating the import in function signatures.
