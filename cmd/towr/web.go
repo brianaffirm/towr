@@ -49,6 +49,56 @@ func newWebCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comma
 				json.NewEncoder(w).Encode(rows)
 			})
 
+			mux.HandleFunc("/api/workspaces/", func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					http.Error(w, "method not allowed", 405)
+					return
+				}
+				// Expect paths like /api/workspaces/{id}/approve or /api/workspaces/{id}/send
+				rest := strings.TrimPrefix(r.URL.Path, "/api/workspaces/")
+				parts := strings.SplitN(rest, "/", 2)
+				if len(parts) != 2 || parts[0] == "" {
+					http.Error(w, "invalid path", 400)
+					return
+				}
+				id, action := parts[0], parts[1]
+
+				var term terminal.Backend
+				if app != nil {
+					term = app.term
+				} else {
+					if _, err := lookupTmux(); err != nil {
+						http.Error(w, "tmux not available", 500)
+						return
+					}
+					term = terminal.NewTmuxBackend("towr")
+				}
+
+				switch action {
+				case "approve":
+					if err := term.SendKeys(id, "Enter"); err != nil {
+						http.Error(w, err.Error(), 500)
+						return
+					}
+					w.WriteHeader(http.StatusNoContent)
+				case "send":
+					var body struct {
+						Message string `json:"message"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Message == "" {
+						http.Error(w, "missing message", 400)
+						return
+					}
+					if err := term.PasteBuffer(id, body.Message); err != nil {
+						http.Error(w, err.Error(), 500)
+						return
+					}
+					w.WriteHeader(http.StatusNoContent)
+				default:
+					http.Error(w, "unknown action", 404)
+				}
+			})
+
 			mux.HandleFunc("/stream/", func(w http.ResponseWriter, r *http.Request) {
 				id := strings.TrimPrefix(r.URL.Path, "/stream/")
 				if id == "" {
@@ -264,6 +314,18 @@ var dashboardTmpl = template.Must(template.New("dashboard").Parse(`<!DOCTYPE htm
   .card-details { display: flex; gap: 1rem; font-size: 0.7rem; color: #8b949e; flex-wrap: wrap; }
   .card-details .label { color: #484f58; }
 
+  .card-actions {
+    display: flex; gap: 0.4rem; align-items: center; margin-top: 0.5rem; flex-wrap: wrap;
+  }
+  .card-actions button {
+    background: #21262d; border: 1px solid #30363d; color: #8b949e; border-radius: 4px;
+    padding: 2px 8px; cursor: pointer; font-family: inherit; font-size: 0.65rem;
+  }
+  .card-actions button:hover { color: #c9d1d9; border-color: #484f58; }
+  .card-actions input {
+    background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px;
+    padding: 2px 6px; font-family: inherit; font-size: 0.65rem; flex: 1; min-width: 80px;
+  }
   .empty-state { text-align: center; color: #484f58; padding: 4rem 1rem; font-size: 0.85rem; }
 
   @media (max-width: 768px) {
@@ -354,7 +416,16 @@ var dashboardTmpl = template.Must(template.New("dashboard").Parse(`<!DOCTYPE htm
         html += '<span><span class="label">task</span> ' + esc(ws.task) + '</span>';
         html += '<span><span class="label">diff</span> ' + esc(ws.diff) + '</span>';
         html += '<span><span class="label">age</span> ' + esc(ws.age) + '</span>';
-        html += '</div></div>';
+        html += '</div>';
+        var su = (ws.status||"").toUpperCase();
+        if (su === "BLOCKED" || su === "RUNNING" || su === "SPAWNED") {
+          html += '<div class="card-actions">';
+          html += '<button data-approve="' + esc(ws.id) + '">approve</button>';
+          html += '<input data-send-input="' + esc(ws.id) + '" placeholder="message…" onclick="event.stopPropagation()">';
+          html += '<button data-send="' + esc(ws.id) + '">send</button>';
+          html += '</div>';
+        }
+        html += '</div>';
       });
       html += '</div></div>';
     });
@@ -365,6 +436,25 @@ var dashboardTmpl = template.Must(template.New("dashboard").Parse(`<!DOCTYPE htm
 
     document.querySelectorAll(".card").forEach(function(el) {
       el.addEventListener("click", function() { openTerminal(el.getAttribute("data-id")); });
+    });
+    document.querySelectorAll("[data-approve]").forEach(function(btn) {
+      btn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        fetch("/api/workspaces/" + encodeURIComponent(btn.getAttribute("data-approve")) + "/approve", {method:"POST"});
+      });
+    });
+    document.querySelectorAll("[data-send]").forEach(function(btn) {
+      btn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        var id = btn.getAttribute("data-send");
+        var input = document.querySelector("[data-send-input='" + id + "']");
+        if (!input || !input.value) return;
+        fetch("/api/workspaces/" + encodeURIComponent(id) + "/send", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({message: input.value})
+        });
+        input.value = "";
+      });
     });
   }
 
