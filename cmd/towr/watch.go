@@ -1063,14 +1063,16 @@ func pollPRsSingleRepo(app *appContext, prStates map[int]*prState, wsStates map[
 				st.commentRetries++
 				lastComment := actionableComments[len(actionableComments)-1]
 				prompt := fmt.Sprintf(
-					"There is a new comment on PR #%d from @%s:\n\n%s\n\n"+
-						"Read the full conversation with 'gh pr view %d --comments'. "+
-						"If the comment is a question, reply using:\n"+
-						"gh pr comment %d --body \"> %s\\n\\n---\\n%s\\n\\nYour reply here\"\n"+
-						"If the comment requests code changes, make the changes and push.\n"+
-						"Be thoughtful and specific in your reply.",
+					"There is a new comment on PR #%d from @%s:\n\n> %s\n\n"+
+						"Read the full conversation with 'gh pr view %d --comments'.\n\n"+
+						"CRITICAL: Your reply MUST start with this exact line:\n%s\n\n"+
+						"If the comment is a question, reply with gh pr comment.\n"+
+						"If it requests code changes, make changes and push.\n"+
+						"Example reply command:\ngh pr comment %d --body '%s\n\nYour detailed reply here'",
 					pr.Number, lastComment.Author.Login, truncate(lastComment.Body, 500),
-					pr.Number, pr.Number, towrReplySignature, towrReplySignature)
+					pr.Number,
+					towrReplySignature,
+					pr.Number, towrReplySignature)
 				if *jsonFlag {
 					emitJSON(map[string]interface{}{
 						"time":      formatTime(now),
@@ -1221,14 +1223,16 @@ func pollPRsAllRepos(cache *repoStoreCache, prStates map[int]*prState, wsStates 
 				st.commentRetries++
 				lastComment := actionableComments[len(actionableComments)-1]
 				prompt := fmt.Sprintf(
-					"There is a new comment on PR #%d from @%s:\n\n%s\n\n"+
-						"Read the full conversation with 'gh pr view %d --comments'. "+
-						"If the comment is a question, reply using:\n"+
-						"gh pr comment %d --body \"> %s\\n\\n---\\n%s\\n\\nYour reply here\"\n"+
-						"If the comment requests code changes, make the changes and push.\n"+
-						"Be thoughtful and specific in your reply.",
+					"There is a new comment on PR #%d from @%s:\n\n> %s\n\n"+
+						"Read the full conversation with 'gh pr view %d --comments'.\n\n"+
+						"CRITICAL: Your reply MUST start with this exact line:\n%s\n\n"+
+						"If the comment is a question, reply with gh pr comment.\n"+
+						"If it requests code changes, make changes and push.\n"+
+						"Example reply command:\ngh pr comment %d --body '%s\n\nYour detailed reply here'",
 					pr.Number, lastComment.Author.Login, truncate(lastComment.Body, 500),
-					pr.Number, pr.Number, towrReplySignature, towrReplySignature)
+					pr.Number,
+					towrReplySignature,
+					pr.Number, towrReplySignature)
 				if *jsonFlag {
 					emitJSON(map[string]interface{}{
 						"time":      formatTime(now),
@@ -1269,7 +1273,8 @@ func pollPRsAllRepos(cache *repoStoreCache, prStates map[int]*prState, wsStates 
 	}
 }
 
-// dispatchReaction shells out to `towr dispatch` to re-dispatch a fix prompt.
+// dispatchReaction shells out to `towr dispatch` or `towr send` to handle a reaction.
+// If dispatch fails (workspace RUNNING), falls back to `towr send` for interactive sessions.
 func dispatchReaction(wsID, prompt string, jsonFlag *bool) {
 	towrBin, err := os.Executable()
 	if err != nil {
@@ -1280,6 +1285,13 @@ func dispatchReaction(wsID, prompt string, jsonFlag *bool) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
+		// Dispatch failed — workspace may be RUNNING. Try `towr send` as fallback.
+		sendCmd := exec.Command(towrBin, "send", wsID, prompt)
+		sendCmd.Stdout = os.Stdout
+		sendCmd.Stderr = os.Stderr
+		if sendErr := sendCmd.Run(); sendErr == nil {
+			return // send succeeded
+		}
 		now := time.Now()
 		if *jsonFlag {
 			emitJSON(map[string]interface{}{

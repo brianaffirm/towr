@@ -62,7 +62,9 @@ func isDialogIndicator(line string) bool {
 	return strings.Contains(line, "Esc to cancel") ||
 		strings.Contains(line, "Do you want to") ||
 		strings.Contains(line, "Tab to amend") ||
-		strings.Contains(line, "Enter to confirm")
+		strings.Contains(line, "Enter to confirm") ||
+		strings.Contains(line, "Command contains") ||
+		strings.Contains(line, "This command requires approval")
 }
 
 // isIdlePrompt checks if a line is Claude's idle input prompt.
