@@ -93,6 +93,77 @@ func isIdlePrompt(line string) bool {
 	return true
 }
 
+// DetectPaneStateWithPatterns is like DetectPaneState but uses caller-provided
+// dialog indicators and idle pattern instead of the hardcoded Claude Code defaults.
+// This enables support for different AI coding agents.
+func DetectPaneStateWithPatterns(capturedOutput string, dialogIndicators []string, idlePattern string) PaneState {
+	lines := strings.Split(strings.TrimRight(capturedOutput, "\n"), "\n")
+
+	// First pass: check if a permission dialog is active in the last 15 lines.
+	checked := 0
+	hasContent := false
+	for i := len(lines) - 1; i >= 0 && checked < 15; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		checked++
+		hasContent = true
+		if IsDialogIndicatorWithPatterns(line, dialogIndicators) {
+			return PaneBlocked
+		}
+	}
+
+	if !hasContent {
+		return PaneEmpty
+	}
+
+	// Second pass: look for idle prompt.
+	checked = 0
+	for i := len(lines) - 1; i >= 0 && checked < 15; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		checked++
+		if isIdlePromptWithPattern(line, idlePattern, dialogIndicators) {
+			return PaneIdle
+		}
+	}
+	return PaneWorking
+}
+
+// IsDialogIndicatorWithPatterns checks if a line matches any of the provided
+// dialog indicator patterns.
+func IsDialogIndicatorWithPatterns(line string, patterns []string) bool {
+	for _, p := range patterns {
+		if strings.Contains(line, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// isIdlePromptWithPattern checks if a line contains an idle prompt using the
+// provided idle pattern and dialog indicators.
+func isIdlePromptWithPattern(line, idlePattern string, dialogIndicators []string) bool {
+	idx := strings.Index(line, idlePattern)
+	if idx < 0 {
+		return false
+	}
+	rest := strings.TrimSpace(line[idx+len(idlePattern):])
+	if rest == "" {
+		return true
+	}
+	if len(rest) > 0 && rest[0] >= '0' && rest[0] <= '9' {
+		return false
+	}
+	if IsDialogIndicatorWithPatterns(line, dialogIndicators) {
+		return false
+	}
+	return true
+}
+
 // ExtractDialogContext extracts the permission dialog question from capture-pane output.
 // Looks for lines containing "Do you want to" or similar permission text.
 func ExtractDialogContext(capturedOutput string) string {

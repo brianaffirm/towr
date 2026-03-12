@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brianaffirm/towr/internal/agent"
 	"github.com/brianaffirm/towr/internal/cli"
 	"github.com/brianaffirm/towr/internal/dispatch"
 	"github.com/brianaffirm/towr/internal/store"
@@ -213,21 +214,24 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 		return fmt.Errorf("capture pane: %w", err)
 	}
 
+	ag := agent.Default()
+
 	paneState := dispatch.DetectPaneState(captured)
 	if paneState != dispatch.PaneIdle {
-		// Acquire launch lock to prevent concurrent Claude startups.
+		// Acquire launch lock to prevent concurrent agent startups.
 		unlock, err := dispatch.AcquireLaunchLock()
 		if err != nil {
 			return fmt.Errorf("acquire launch lock: %w", err)
 		}
 
-		// Claude not running or not idle — launch it.
-		if err := app.term.PasteBuffer(wsID, "unset CLAUDECODE && claude"); err != nil {
+		// Agent not running or not idle — launch it.
+		if err := app.term.PasteBuffer(wsID, ag.LaunchCommand()); err != nil {
 			unlock()
-			return fmt.Errorf("launch claude: %w", err)
+			return fmt.Errorf("launch %s: %w", ag.Name(), err)
 		}
 
-		// Wait for Claude to start. Handle trust/permission dialogs.
+		// Wait for agent to start. Handle trust/permission dialogs.
+		startupDialogs := ag.StartupDialogs()
 		started := false
 		for i := 0; i < 40; i++ { // up to ~60 seconds
 			time.Sleep(1500 * time.Millisecond)
@@ -237,9 +241,16 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 			}
 
 			// Handle any dialog during startup by pressing Enter.
-			if strings.Contains(captured, "Enter to confirm") {
-				_ = app.term.SendKeys(wsID, "Enter")
-				time.Sleep(1 * time.Second)
+			dismissed := false
+			for _, pattern := range startupDialogs {
+				if strings.Contains(captured, pattern) {
+					_ = app.term.SendKeys(wsID, "Enter")
+					time.Sleep(1 * time.Second)
+					dismissed = true
+					break
+				}
+			}
+			if dismissed {
 				continue
 			}
 
@@ -250,7 +261,7 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 		}
 		unlock()
 		if !started {
-			return fmt.Errorf("timed out waiting for Claude to start in workspace %q", wsID)
+			return fmt.Errorf("timed out waiting for %s to start in workspace %q", ag.Name(), wsID)
 		}
 	}
 

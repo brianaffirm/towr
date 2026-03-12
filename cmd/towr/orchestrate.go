@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/brianaffirm/towr/internal/agent"
 	"github.com/brianaffirm/towr/internal/dispatch"
 	"github.com/brianaffirm/towr/internal/orchestrate"
 	"github.com/brianaffirm/towr/internal/store"
@@ -177,20 +178,23 @@ func (r *appRuntime) DispatchPrompt(wsID, prompt string) (string, error) {
 		return "", fmt.Errorf("capture pane: %w", err)
 	}
 
+	ag := agent.Default()
+
 	paneState := dispatch.DetectPaneState(captured)
 	if paneState != dispatch.PaneIdle {
-		// Claude not running — launch it.
+		// Agent not running — launch it.
 		unlock, err := dispatch.AcquireLaunchLock()
 		if err != nil {
 			return "", fmt.Errorf("acquire launch lock: %w", err)
 		}
 
-		if err := r.app.term.PasteBuffer(wsID, "unset CLAUDECODE && claude"); err != nil {
+		if err := r.app.term.PasteBuffer(wsID, ag.LaunchCommand()); err != nil {
 			unlock()
-			return "", fmt.Errorf("launch claude: %w", err)
+			return "", fmt.Errorf("launch %s: %w", ag.Name(), err)
 		}
 
-		// Wait for Claude to start.
+		// Wait for agent to start.
+		startupDialogs := ag.StartupDialogs()
 		started := false
 		for i := 0; i < 40; i++ {
 			time.Sleep(1500 * time.Millisecond)
@@ -198,9 +202,16 @@ func (r *appRuntime) DispatchPrompt(wsID, prompt string) (string, error) {
 			if err != nil {
 				continue
 			}
-			if strings.Contains(captured, "Enter to confirm") {
-				_ = r.app.term.SendKeys(wsID, "Enter")
-				time.Sleep(1 * time.Second)
+			dismissed := false
+			for _, pattern := range startupDialogs {
+				if strings.Contains(captured, pattern) {
+					_ = r.app.term.SendKeys(wsID, "Enter")
+					time.Sleep(1 * time.Second)
+					dismissed = true
+					break
+				}
+			}
+			if dismissed {
 				continue
 			}
 			if dispatch.DetectPaneState(captured) == dispatch.PaneIdle {
@@ -210,7 +221,7 @@ func (r *appRuntime) DispatchPrompt(wsID, prompt string) (string, error) {
 		}
 		unlock()
 		if !started {
-			return "", fmt.Errorf("timed out waiting for Claude to start in workspace %q", wsID)
+			return "", fmt.Errorf("timed out waiting for %s to start in workspace %q", ag.Name(), wsID)
 		}
 	}
 
