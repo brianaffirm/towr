@@ -55,12 +55,15 @@ func newWebCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comma
 				json.NewEncoder(w).Encode([]store.Event{})
 				return
 			}
-			events, err := app.store.QueryEvents(store.EventQuery{Limit: 50})
+			events, err := app.store.QueryEvents(store.EventQuery{})
 			if err != nil {
 				http.Error(w, err.Error(), 500)
 				return
 			}
-			// Reverse to newest-first.
+			// Take the last 50 (newest) and reverse to newest-first.
+			if len(events) > 50 {
+				events = events[len(events)-50:]
+			}
 			for i, j := 0, len(events)-1; i < j; i, j = i+1, j-1 {
 				events[i], events[j] = events[j], events[i]
 			}
@@ -477,15 +480,9 @@ var dashboardTmpl = template.Must(template.New("dashboard").Parse(`<!DOCTYPE htm
   }
 
   function poll() {
-    Promise.all([
-      fetch("/api/workspaces").then(function(r) { return r.json(); }),
-      fetch("/api/events").then(function(r) { return r.json(); })
-    ]).then(function(results) {
-      render(results[0]);
-      renderEvents(results[1]);
-    }).catch(function() {}).finally(function() {
-      setTimeout(poll, 5000);
-    });
+    fetch("/api/workspaces").then(function(r) { return r.json(); }).then(render).catch(function() {});
+    fetch("/api/events").then(function(r) { return r.json(); }).then(renderEvents).catch(function() {});
+    setTimeout(poll, 5000);
   }
   poll();
 })();
