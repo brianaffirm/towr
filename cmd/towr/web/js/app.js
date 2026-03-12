@@ -37,8 +37,8 @@
   }
 
   function shieldInfo(s) {
-    if (s.bypass_count > 0) return { icon: "\uD83D\uDFE0", color: "#f85149", label: "bypass detected" };
-    if (s.approval_count > 0) return { icon: "\uD83D\uDFE1", color: "#d29922", label: s.approval_count + " auto-approval" + (s.approval_count > 1 ? "s" : "") };
+    if (s.bypasses > 0) return { icon: "\uD83D\uDFE0", color: "#f85149", label: "bypass detected" };
+    if (s.approvals > 0) return { icon: "\uD83D\uDFE1", color: "#d29922", label: s.approvals + " auto-approval" + (s.approvals > 1 ? "s" : "") };
     return { icon: "\uD83D\uDFE2", color: "#3fb950", label: "fully sandboxed" };
   }
 
@@ -48,8 +48,8 @@
     var info = shieldInfo(s);
     el.style.color = info.color;
     el.innerHTML = info.icon + '<span class="shield-tooltip">' + esc(info.label) +
-      (s.approval_count ? '<br>approvals: ' + s.approval_count : '') +
-      (s.bypass_count ? '<br>bypasses: ' + s.bypass_count : '') + '</span>';
+      (s.approvals ? '<br>approvals: ' + s.approvals : '') +
+      (s.bypasses ? '<br>bypasses: ' + s.bypasses : '') + '</span>';
   }
 
   function renderStats(data) {
@@ -68,8 +68,8 @@
     var timeStr = now.toLocaleTimeString();
     var totalApprovals = 0, totalBypasses = 0;
     Object.keys(safetyCache).forEach(function(k) {
-      totalApprovals += (safetyCache[k].approval_count || 0);
-      totalBypasses += (safetyCache[k].bypass_count || 0);
+      totalApprovals += (safetyCache[k].approvals || 0);
+      totalBypasses += (safetyCache[k].bypasses || 0);
     });
     var bypassColor = totalBypasses > 0 ? "#f85149" : "#3fb950";
     var bypassClass = totalBypasses > 0 ? ' stat-pulse' : '';
@@ -169,7 +169,7 @@
 
   // Export audit CSV
   document.getElementById("exportAudit").addEventListener("click", function() {
-    window.location.href = "/api/audit/export?format=csv&since=7d";
+    window.location.href = "/api/audit/export?format=csv&since=168h";
   });
 
   function poll() {

@@ -157,7 +157,7 @@ func newWebCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comma
 					return
 				}
 
-				events, err := app.store.QueryEvents(store.EventQuery{WorkspaceID: id})
+				events, err := app.store.QueryEvents(store.EventQuery{WorkspaceID: id, RepoRoot: app.repoRoot})
 				if err != nil {
 					http.Error(w, err.Error(), 500)
 					return

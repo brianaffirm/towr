@@ -67,9 +67,10 @@
       var isNew = !prevIds[key];
       var color = DOT_COLORS[ev.kind] || DEFAULT_DOT;
       var ws = ev.workspace_id || "-";
-      var isBypass = ev.kind === "safety.bypass";
-      var isApproval = ev.kind === "safety.approved";
-      var isBlock = ev.kind === "safety.blocked";
+      var kind = ev.kind || "";
+      var isBypass = kind === "workspace.landing.forced" || kind === "workspace.landing.hooks_skipped" || kind === "workspace.cleanup.forced";
+      var isApproval = kind === "queue.resolved";
+      var isBlock = kind.indexOf("blocked") !== -1;
       var rowClass = "evt-row" + (isNew ? " evt-new" : "") + (isBypass ? " evt-bypass" : "");
 
       if (isApproval) color = "#3fb950";

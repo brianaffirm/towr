@@ -440,7 +440,7 @@ API endpoints:
 - `GET /api/workspaces` — JSON workspace list for scripting
 - `GET /api/events` — recent audit events (supports `?type=approval` or `?type=bypass` filtering)
 - `GET /api/workspace/<id>/safety` — per-workspace safety summary (level, approval count, bypass count)
-- `GET /api/audit/export?format=csv&since=7d` — CSV audit trail export
+- `GET /api/audit/export?format=csv&since=168h` — CSV audit trail export
 - `GET /api/stream/<id>` — SSE live terminal output
 - `POST /api/workspaces/<id>/approve` — approve permission dialog
 - `POST /api/workspaces/<id>/send` — send message to workspace
