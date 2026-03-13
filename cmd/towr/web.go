@@ -13,6 +13,7 @@ import (
 
 	"github.com/brianaffirm/towr/internal/cli"
 	"github.com/brianaffirm/towr/internal/config"
+	"github.com/brianaffirm/towr/internal/cost"
 	"github.com/brianaffirm/towr/internal/store"
 	"github.com/brianaffirm/towr/internal/terminal"
 	"github.com/brianaffirm/towr/internal/workspace"
@@ -181,6 +182,11 @@ func newWebCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comma
 					if v, ok := ev.Data["token_source"].(string); ok {
 						item.Source = v
 					}
+					// Pre-run estimate: what DefaultEstimate (10K in + 30K out) would cost at this model's price.
+					estUsage := cost.DefaultEstimate()
+					item.EstimatedCost = cost.Calculate(item.Model, estUsage)
+
+					summary.TotalEstimated += item.EstimatedCost
 					summary.TotalSpent += item.Cost
 					summary.TotalOpus += item.OpusCost
 					summary.Tasks = append(summary.Tasks, item)
@@ -439,6 +445,7 @@ type safetySummary struct {
 }
 
 type costSummary struct {
+	TotalEstimated float64        `json:"totalEstimated"`
 	TotalSpent     float64        `json:"totalSpent"`
 	TotalOpus      float64        `json:"totalOpus"`
 	TotalSaved     float64        `json:"totalSaved"`
@@ -448,14 +455,15 @@ type costSummary struct {
 }
 
 type costTaskItem struct {
-	ID           string  `json:"id"`
-	Model        string  `json:"model"`
-	Reason       string  `json:"reason"`
-	InputTokens  int     `json:"inputTokens"`
-	OutputTokens int     `json:"outputTokens"`
-	Cost         float64 `json:"cost"`
-	OpusCost     float64 `json:"opusCost"`
-	Source       string  `json:"source"`
+	ID            string  `json:"id"`
+	Model         string  `json:"model"`
+	Reason        string  `json:"reason"`
+	InputTokens   int     `json:"inputTokens"`
+	OutputTokens  int     `json:"outputTokens"`
+	Cost          float64 `json:"cost"`
+	EstimatedCost float64 `json:"estimatedCost"`
+	OpusCost      float64 `json:"opusCost"`
+	Source        string  `json:"source"`
 }
 
 // buildSafetySummary computes safety metrics from workspace events.
