@@ -23,6 +23,21 @@ type Task struct {
 	Model     string   `yaml:"model,omitempty"` // model shorthand: opus, sonnet, cursor, codex — maps to agent + model flag
 }
 
+// PolicyRule defines a routing policy that overrides heuristics.
+// Lives in orchestrate (not router) to prevent import cycles.
+type PolicyRule struct {
+	Path            string `yaml:"path"`
+	Keyword         string `yaml:"keyword"`
+	Model           string `yaml:"model"`
+	RequireApproval bool   `yaml:"require_approval"`
+	Pin             bool   `yaml:"pin"`
+}
+
+// RoutingSettings configures smart model routing.
+type RoutingSettings struct {
+	Rules []PolicyRule `yaml:"rules"`
+}
+
 // Settings controls execution behavior for the plan.
 type Settings struct {
 	AutoApprove    bool   `yaml:"auto_approve"`
@@ -34,7 +49,9 @@ type Settings struct {
 	Web            bool   `yaml:"web"`                // start web dashboard
 	WebAddr        string `yaml:"web_addr,omitempty"` // web dashboard address (default :8090)
 	DefaultAgent   string `yaml:"default_agent,omitempty"`
-	DefaultModel   string `yaml:"default_model,omitempty"` // default model: opus, sonnet, etc.
+	DefaultModel   string          `yaml:"default_model,omitempty"` // default model: opus, sonnet, etc.
+	Routing        RoutingSettings `yaml:"routing"`
+	Budget         float64         `yaml:"budget"`
 }
 
 // LoadPlan reads and parses a YAML plan file from the given path.
