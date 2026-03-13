@@ -12,19 +12,23 @@ name: "PROJ sprint 24"
 tasks:
   - id: proj-1234
     prompt: "Read Jira ticket PROJ-1234 and implement what it describes. Run tests."
+    model: sonnet                # cheap model for routine implementation
   - id: proj-1235
     prompt: "Read Jira ticket PROJ-1235 and implement it."
+    agent: cursor                # use Cursor CLI
   - id: proj-1236
     prompt: "Read Jira ticket PROJ-1236. Depends on PROJ-1234."
+    agent: codex                 # use Codex CLI
     depends_on: [proj-1234]
 settings:
-  auto_approve: true    # scoped allowlist, not blanket permissions
-  land_pr: true         # each task creates a PR, nothing merges to main
+  auto_approve: true             # scoped allowlist, not blanket permissions
+  create_pr: true                # each task creates a PR automatically
+  web: true                      # live dashboard at :8090
 ```
 
 ```bash
-towr orchestrate sprint.yaml   # spawns 3 workspaces, agents read Jira tickets, create PRs
-towr watch --react --all --auto-approve  # approves safe actions, monitors PRs, auto-fixes CI + reviews
+towr run sprint.yaml
+# that's it — spawns agents, approves permissions, creates PRs, shows dashboard
 # morning: 3 PRs ready for your review
 ```
 
