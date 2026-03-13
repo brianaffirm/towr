@@ -3,40 +3,7 @@
 
   var activeId = null;
   var evtSource = null;
-  var updateCount = 0;
   var rawMode = false;
-
-  // Step parser: classify lines by marker and content.
-  // ⏺ = active step, • = completed step
-  var STEP_RE = /^[\s]*([\u2B58\u25CF\u2022])[\s]+(.+)$/;
-  var KIND_PATTERNS = [
-    { re: /\b(read|reading|Read)\b/, kind: "read" },
-    { re: /\b(writ|edit|creat|Write|Edit)\b/, kind: "write" },
-    { re: /\b(test|Test|assert|spec)\b/, kind: "test" },
-    { re: /\b(commit|push|merge|Commit)\b/, kind: "commit" }
-  ];
-
-  function classifyStep(text) {
-    for (var i = 0; i < KIND_PATTERNS.length; i++) {
-      if (KIND_PATTERNS[i].re.test(text)) return KIND_PATTERNS[i].kind;
-    }
-    return "read";
-  }
-
-  function parseSteps(raw) {
-    var lines = raw.split("\n");
-    var steps = [];
-    for (var i = 0; i < lines.length; i++) {
-      var m = lines[i].match(STEP_RE);
-      if (m) {
-        var marker = m[1];
-        var text = m[2].trim();
-        var active = marker === "\u2B58" || marker === "\u25CF";
-        steps.push({ text: text, active: active, kind: classifyStep(text) });
-      }
-    }
-    return steps;
-  }
 
   function esc(s) {
     var d = document.createElement("span");
@@ -44,94 +11,42 @@
     return d.innerHTML;
   }
 
-  function renderSteps(steps) {
-    var html = '<ul class="ws-steps">';
-    for (var i = 0; i < steps.length; i++) {
-      var s = steps[i];
-      var cls = s.active ? "ws-step active" : "ws-step";
-      var icon = s.active ? "\u25B6" : "\u2713";
-      html += '<li class="' + cls + '">';
-      html += '<span class="ws-step-icon ' + s.kind + '">' + icon + '</span>';
-      html += '<span>' + esc(s.text) + '</span>';
-      html += '</li>';
-    }
-    html += '</ul>';
-    return html;
-  }
-
-  function renderRaw(text) {
-    return '<pre style="margin:0;white-space:pre-wrap;font-size:0.75rem;color:#8b949e">' + esc(text) + '</pre>';
-  }
-
-  // Exposed globally so app.js card clicks can trigger it.
+  // Exposed globally — app.js calls this on row click.
   window.expandWorkspace = function(id) {
-    var panel = document.getElementById("termPanel");
-    var body = document.getElementById("termBody");
-    var title = document.getElementById("termTitle");
-
-    // Toggle off if same id clicked again.
-    if (activeId === id && panel.classList.contains("open")) {
-      closePanel();
+    // Toggle off if same row clicked.
+    if (activeId === id) {
+      collapseWorkspace();
       return;
     }
+    collapseWorkspace();
 
     activeId = id;
-    updateCount = 0;
     rawMode = false;
-    panel.classList.add("open");
-    title.textContent = id;
-    body.innerHTML = '<span style="color:#484f58">connecting\u2026</span>';
 
-    // Render action bar
-    renderActionBar();
+    // Find the clicked row and insert expanded view after it.
+    var row = document.querySelector('.ws-row[data-id="' + id + '"]');
+    if (!row) return;
+    row.classList.add("expanded");
 
-    // Highlight active card
-    document.querySelectorAll(".card").forEach(function(el) {
-      el.classList.toggle("active", el.getAttribute("data-id") === id);
-    });
+    var panel = document.createElement("div");
+    panel.className = "workspace-expanded";
+    panel.innerHTML =
+      '<div class="expanded-header">' +
+        '<span class="expanded-title">' + esc(id) + '</span>' +
+        '<button class="btn-ghost expanded-close">✕</button>' +
+      '</div>' +
+      '<div class="expanded-body"><span style="color:var(--text-muted)">Connecting...</span></div>' +
+      '<div class="action-bar">' +
+        '<input class="action-input" placeholder="Send a message...">' +
+        '<button class="btn-accent action-send">Send</button>' +
+        '<button class="btn-ghost action-raw">Raw terminal</button>' +
+      '</div>';
+    row.after(panel);
 
-    // Connect SSE
-    if (evtSource) { evtSource.close(); evtSource = null; }
-    evtSource = new EventSource("/stream/" + encodeURIComponent(id));
-    evtSource.onmessage = function(e) {
-      updateCount++;
-      var text = e.data.replace(/\n$/, "");
-      var steps = parseSteps(text);
-
-      // Structured view if we have steps and haven't exceeded threshold, or not in raw mode.
-      if (!rawMode && steps.length > 0 && updateCount <= 3) {
-        body.innerHTML = renderSteps(steps);
-      } else {
-        // After 3 updates or raw mode, show raw terminal output.
-        if (!rawMode && updateCount > 3 && steps.length > 0) {
-          rawMode = false; // keep structured if steps exist, unless user toggled
-          body.innerHTML = renderSteps(steps);
-        } else {
-          body.innerHTML = renderRaw(text);
-        }
-      }
-      body.scrollTop = body.scrollHeight;
-    };
-    evtSource.onerror = function() {
-      body.innerHTML += '\n<span style="color:#f85149">[stream disconnected]</span>';
-    };
-  };
-
-  function renderActionBar() {
-    var panel = document.getElementById("termPanel");
-    var existing = panel.querySelector(".ws-action-bar");
-    if (existing) existing.remove();
-
-    var bar = document.createElement("div");
-    bar.className = "ws-action-bar";
-    bar.innerHTML =
-      '<input id="wsSendInput" placeholder="message\u2026">' +
-      '<button id="wsSendBtn">send</button>' +
-      '<button id="wsRawToggle"' + (rawMode ? ' class="active"' : '') + '>raw</button>';
-    panel.appendChild(bar);
-
-    document.getElementById("wsSendBtn").addEventListener("click", function() {
-      var input = document.getElementById("wsSendInput");
+    // Bind events
+    panel.querySelector(".expanded-close").addEventListener("click", collapseWorkspace);
+    panel.querySelector(".action-send").addEventListener("click", function() {
+      var input = panel.querySelector(".action-input");
       if (!input.value || !activeId) return;
       fetch("/api/workspaces/" + encodeURIComponent(activeId) + "/send", {
         method: "POST",
@@ -140,29 +55,99 @@
       });
       input.value = "";
     });
-
-    document.getElementById("wsSendInput").addEventListener("keydown", function(e) {
-      if (e.key === "Enter") document.getElementById("wsSendBtn").click();
+    panel.querySelector(".action-input").addEventListener("keydown", function(e) {
+      if (e.key === "Enter") panel.querySelector(".action-send").click();
     });
-
-    document.getElementById("wsRawToggle").addEventListener("click", function() {
+    panel.querySelector(".action-raw").addEventListener("click", function() {
       rawMode = !rawMode;
       this.classList.toggle("active", rawMode);
     });
-  }
 
-  function closePanel() {
-    document.getElementById("termPanel").classList.remove("open");
+    // Connect SSE
+    connectSSE(id, panel.querySelector(".expanded-body"));
+  };
+
+  function collapseWorkspace() {
     if (evtSource) { evtSource.close(); evtSource = null; }
     activeId = null;
-    updateCount = 0;
-    var bar = document.querySelector(".ws-action-bar");
-    if (bar) bar.remove();
-    document.querySelectorAll(".card.active").forEach(function(el) {
-      el.classList.remove("active");
+    var panel = document.querySelector(".workspace-expanded");
+    if (panel) panel.remove();
+    document.querySelectorAll(".ws-row.expanded").forEach(function(el) {
+      el.classList.remove("expanded");
     });
   }
+  window.collapseWorkspace = collapseWorkspace;
 
-  var termClose = document.getElementById("termClose");
-  if (termClose) termClose.addEventListener("click", closePanel);
+  function connectSSE(id, body) {
+    evtSource = new EventSource("/stream/" + encodeURIComponent(id));
+    evtSource.onmessage = function(e) {
+      var text = e.data;
+      if (rawMode) {
+        body.innerHTML = '<pre class="raw-output">' + esc(text) + '</pre>';
+      } else {
+        // Try to parse structured steps
+        var steps = parseSteps(text);
+        if (steps.length > 0) {
+          body.innerHTML = renderSteps(steps);
+        } else {
+          body.innerHTML = '<pre class="raw-output">' + esc(text) + '</pre>';
+        }
+      }
+      body.scrollTop = body.scrollHeight;
+    };
+    evtSource.onerror = function() {
+      if (evtSource && evtSource.readyState === EventSource.CLOSED) {
+        body.innerHTML += '<div style="color:var(--text-muted);padding:8px 0">Stream ended</div>';
+      }
+    };
+  }
+
+  // Step parser
+  function parseSteps(text) {
+    var lines = text.split("\n");
+    var steps = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      // Claude: ⏺ prefix, Codex: • prefix
+      if (line.match(/^[\u23FA\u2B58\u25CF\u2022\u2B24]/) || line.match(/^\u2022/) || line.indexOf("\u23FA") === 0) {
+        var label = line.replace(/^[\u23FA\u2B58\u25CF\u2022\u2B24\s]+/, "").trim();
+        if (label) {
+          var kind = classifyStep(label);
+          var done = line.indexOf("\u2713") >= 0 || line.indexOf("✓") >= 0;
+          steps.push({ label: label, kind: kind, done: done });
+        }
+      }
+    }
+    return steps;
+  }
+
+  function classifyStep(text) {
+    if (/\b(Read|Explored|Searched|Globbed)\b/.test(text)) return "read";
+    if (/\b(Write|Edit|Added|Created|Update)\b/.test(text)) return "write";
+    if (/\b(Bash\(go test|test|Test)\b/.test(text)) return "test";
+    if (/\b(Bash\(git|commit|Commit)\b/.test(text)) return "commit";
+    if (/\b(Bash\(gh|pr|PR)\b/.test(text)) return "pr";
+    return "action";
+  }
+
+  function renderSteps(steps) {
+    var html = '<div class="step-list">';
+    for (var i = 0; i < steps.length; i++) {
+      var s = steps[i];
+      var icon = s.done ? '<span style="color:var(--accent-green)">✓</span>' :
+        (i === steps.length - 1 ? '<span style="color:var(--accent-blue)">▶</span>' :
+        '<span style="color:var(--accent-green)">✓</span>');
+      html += '<div class="step-item">';
+      html += '<span class="step-icon">' + icon + '</span>';
+      html += '<span class="step-label">' + esc(s.label) + '</span>';
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  // Close on Escape
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape" && activeId) collapseWorkspace();
+  });
 })();

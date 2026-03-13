@@ -153,6 +153,8 @@
     });
 
     var list = document.getElementById("workspaceList");
+    // Don't rebuild DOM if a workspace is expanded (would destroy the panel).
+    if (document.querySelector(".workspace-expanded")) return;
     if (list._lastHTML !== html) {
       list._lastHTML = html;
       list.innerHTML = html;
