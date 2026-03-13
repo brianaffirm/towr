@@ -2,6 +2,8 @@ package router
 
 import (
 	"testing"
+
+	"github.com/brianaffirm/towr/internal/orchestrate"
 )
 
 func TestHeuristic_SimplePrompt(t *testing.T) {
@@ -111,5 +113,84 @@ func TestCountFileReferences_Three(t *testing.T) {
 	n := countFileReferences("Update cmd/towr/main.go, internal/config/config.go, and internal/store/store.go")
 	if n != 3 {
 		t.Errorf("expected 3, got %d", n)
+	}
+}
+
+func TestMatchPolicy_PathRule(t *testing.T) {
+	rules := []orchestrate.PolicyRule{
+		{Path: "infrastructure/**", Model: "opus"},
+	}
+	d, ok := matchPolicy("Update infrastructure/terraform/main.tf with new VPC config", rules)
+	if !ok {
+		t.Fatal("expected policy match")
+	}
+	if d.Model != "opus" {
+		t.Errorf("model = %q, want opus", d.Model)
+	}
+	if d.Reason != "policy:infrastructure/**" {
+		t.Errorf("reason = %q", d.Reason)
+	}
+}
+
+func TestMatchPolicy_KeywordRule(t *testing.T) {
+	rules := []orchestrate.PolicyRule{
+		{Keyword: "documentation", Model: "haiku"},
+	}
+	d, ok := matchPolicy("Write documentation for the API endpoints", rules)
+	if !ok {
+		t.Fatal("expected policy match")
+	}
+	if d.Model != "haiku" {
+		t.Errorf("model = %q, want haiku", d.Model)
+	}
+}
+
+func TestMatchPolicy_NoMatch(t *testing.T) {
+	rules := []orchestrate.PolicyRule{
+		{Path: "infrastructure/**", Model: "opus"},
+	}
+	_, ok := matchPolicy("Fix a bug in cmd/towr/run.go", rules)
+	if ok {
+		t.Fatal("expected no match")
+	}
+}
+
+func TestMatchPolicy_PinPreventsEscalation(t *testing.T) {
+	rules := []orchestrate.PolicyRule{
+		{Keyword: "security", Model: "opus", Pin: true},
+	}
+	d, ok := matchPolicy("Fix the security vulnerability", rules)
+	if !ok {
+		t.Fatal("expected match")
+	}
+	if d.CanEscalate {
+		t.Error("pinned policy should not be escalatable")
+	}
+}
+
+func TestMatchPolicy_RequireApproval(t *testing.T) {
+	rules := []orchestrate.PolicyRule{
+		{Path: "infrastructure/**", Model: "opus", RequireApproval: true},
+	}
+	d, ok := matchPolicy("Update infrastructure/k8s/deploy.yaml", rules)
+	if !ok {
+		t.Fatal("expected match")
+	}
+	if !d.RequireApproval {
+		t.Error("expected RequireApproval = true")
+	}
+}
+
+func TestMatchPolicy_FirstMatchWins(t *testing.T) {
+	rules := []orchestrate.PolicyRule{
+		{Keyword: "test", Model: "haiku"},
+		{Keyword: "test", Model: "opus"},
+	}
+	d, ok := matchPolicy("Write a test", rules)
+	if !ok {
+		t.Fatal("expected match")
+	}
+	if d.Model != "haiku" {
+		t.Errorf("model = %q, want haiku (first match)", d.Model)
 	}
 }
