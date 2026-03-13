@@ -277,6 +277,7 @@ type webWorkspace struct {
 	Task   string `json:"task"`
 	Diff   string `json:"diff"`
 	Age    string `json:"age"`
+	Agent  string `json:"agent"`
 }
 
 func collectWorkspaces(app *appContext, appErr error) ([]webWorkspace, error) {
@@ -338,6 +339,7 @@ func collectWorkspaces(app *appContext, appErr error) ([]webWorkspace, error) {
 			Task:   task,
 			Diff:   diffStr,
 			Age:    cli.FormatAgeFromString(ws.CreatedAt),
+			Agent:  ws.AgentRuntime,
 		})
 	}
 	return rows, nil
