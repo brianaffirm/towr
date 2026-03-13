@@ -1,0 +1,29 @@
+name: "mixed-agent-cost-test"
+tasks:
+  - id: claude-haiku-task
+    prompt: "Fix a typo"
+
+  - id: codex-default
+    prompt: "Add a comment"
+    agent: codex
+
+  - id: codex-heavy
+    prompt: "Refactor module"
+    agent: codex
+    model: gpt-5.3-codex
+
+  - id: cursor-default
+    prompt: "Build UI"
+    agent: cursor
+
+  - id: cursor-sonnet
+    prompt: "Complex UI work"
+    agent: cursor
+    model: cursor-sonnet
+
+  - id: claude-opus-task
+    prompt: "Architect the system"
+    model: opus
+
+settings:
+  auto_approve: true

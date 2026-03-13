@@ -1,0 +1,16 @@
+name: "full-auto-test"
+tasks:
+  - id: claude-task
+    prompt: "Fix a typo in README.md"
+
+  - id: codex-task
+    prompt: "Add a comment"
+    agent: codex
+
+  - id: cursor-task
+    prompt: "Build UI"
+    agent: cursor
+
+settings:
+  auto_approve: true
+  full_auto: true

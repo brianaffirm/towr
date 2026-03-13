@@ -39,12 +39,17 @@ tasks:
   - id: frontend
     prompt: "Build the settings UI"
     agent: cursor                # Cursor CLI
+    model: cursor-sonnet         # specify Cursor's model
   - id: data-migration
     prompt: "Write the DB migration"
     agent: codex                 # Codex CLI
+    model: gpt-5.3-codex         # specify Codex's model
 settings:
   default_agent: claude-code     # tasks without agent: use this
+  full_auto: true                # skip all permission prompts
 ```
+
+Each agent gets its own model namespace and pricing. When no model is specified, agents use their cheapest default (codex → codex-mini, cursor → cursor-auto).
 
 ## Why model providers won't build this
 
@@ -139,7 +144,9 @@ Run complete: 6/6 tasks succeeded (18m30s)
   Saved:      $17.18 (79%)
 ```
 
-Token usage is parsed from Claude's JSONL session logs when available, or estimated from prompt length for other runtimes. Budget caps (`--budget $10`) stop new tasks when spend exceeds the limit.
+Token usage is parsed from Claude's JSONL session logs when available, or estimated from prompt length for other runtimes. The web dashboard shows **estimated vs actual** cost with a diff indicator — green when under estimate, yellow when over. Budget caps (`--budget $10`) stop new tasks when spend exceeds the limit.
+
+**Per-agent pricing:** Each runtime has its own pricing table — Claude (opus/sonnet/haiku), Codex (codex-mini/gpt-5.3-codex/gpt-5.4), Cursor (cursor-auto/cursor-sonnet). Cost estimates use each agent's actual rates, not a Claude baseline.
 
 **The math at scale:** A team running 20 agent tasks/day at an average Opus cost of ~$2.40/task spends ~$17.5K/month. Smart routing shifts 70% of those tasks to Sonnet or Haiku, dropping the average to ~$0.60/task — saving over $150K/year. Multiply by the number of teams in your org.
 
@@ -150,7 +157,7 @@ Agents work in sandboxed git worktrees. They can't touch main, other workspaces,
 | Layer | What it does |
 |---|---|
 | **Workspace isolation** | Each agent gets its own git worktree — changes are on a branch, never on main |
-| **Sandbox per runtime** | Claude: scoped allowlist. Cursor: sandbox mode. Codex: `workspace-write`. Each runtime's native safety model is enforced. |
+| **Sandbox per runtime** | Claude: scoped allowlist. Cursor: sandbox mode. Codex: `workspace-write`. Each runtime's native safety model is enforced. `full_auto: true` passes `--dangerously-skip-permissions` (Claude), `--full-auto` (Codex), `--yolo` (Cursor). |
 | **Pre-land hooks** | Tests run before any merge. Fail = blocked. Nothing lands dirty. |
 | **Protected branches** | Agents create PRs, humans merge. No direct push to main. |
 | **Approval visibility** | Every auto-approval logged in the activity feed with what was approved and when |
@@ -272,12 +279,13 @@ towr web                    # http://127.0.0.1:8090
 
 Features:
 - **Score cards** — total, working, blocked, completed, bypasses, approvals at a glance
+- **Cost intelligence** — estimated vs actual spend, savings percentage, per-task model badges
 - **Safety shields** — green (sandboxed), yellow (N approved), red (bypass) per workspace
 - **Activity feed** — grouped approvals, color-coded events, bypass highlighting
 - **Export Audit** — one-click CSV download
 - **Auto-refresh** every 4s, dark theme, zero external dependencies
 
-API: `/api/workspaces`, `/api/events`, `/api/audit/export?format=csv&since=168h`, `/api/stream/<id>` (SSE).
+API: `/api/workspaces`, `/api/events`, `/api/cost`, `/api/audit/export?format=csv&since=168h`, `/api/stream/<id>` (SSE).
 
 ## Configuration
 

@@ -23,18 +23,29 @@ var tierModel = map[int]string{
 	0: "haiku", 1: "sonnet", 2: "opus",
 }
 
+// agentDefaultModel maps external agent names to their default (cheapest) model.
+var agentDefaultModel = map[string]string{
+	"codex":  "codex-mini",
+	"cursor": "cursor-auto",
+}
+
 // Route selects the model for a task. Precedence:
 // 1. task.Model explicit → use it, no escalation
 // 2. policy rule match → use rule's model
 // 3. settings.DefaultModel (if set, overrides heuristic)
 // 4. heuristic analysis of prompt
 func Route(task orchestrate.Task, settings orchestrate.Settings) Decision {
-	// Non-Claude agents manage their own models.
+	// Non-Claude agents use their own model namespace.
 	if task.Agent != "" && task.Agent != "claude-code" {
-		d := heuristic(task.Prompt)
-		d.CanEscalate = false
-		d.Reason = fmt.Sprintf("external-agent:%s", task.Agent)
-		return d
+		model := task.Model
+		if model == "" {
+			model = agentDefaultModel[task.Agent]
+		}
+		return Decision{
+			Model:       model,
+			Reason:      fmt.Sprintf("external-agent:%s", task.Agent),
+			CanEscalate: false,
+		}
 	}
 
 	// 1. Explicit model on task.

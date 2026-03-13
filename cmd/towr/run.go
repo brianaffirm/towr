@@ -23,6 +23,7 @@ import (
 func newRunCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Command {
 	var budgetOverride float64
 	var quiet bool
+	var dryRun bool
 
 	cmd := &cobra.Command{
 		Use:   "run <plan.yaml>",
@@ -56,12 +57,13 @@ PRs for CI failures and review comments.`,
 				plan.Settings.Budget = budgetOverride
 			}
 
-			return runPlan(app, plan, jsonFlag, quiet)
+			return runPlan(app, plan, jsonFlag, quiet, dryRun)
 		},
 	}
 
 	cmd.Flags().Float64Var(&budgetOverride, "budget", 0, "Maximum USD budget for this run (0 = no limit)")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Skip pre-run routing summary display")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show routing table and cost estimate, then exit without executing")
 
 	return cmd
 }
@@ -74,7 +76,7 @@ type runTaskState struct {
 	decision  router.Decision
 }
 
-func runPlan(app *appContext, plan *orchestrate.Plan, jsonFlag *bool, quiet bool) error {
+func runPlan(app *appContext, plan *orchestrate.Plan, jsonFlag *bool, quiet bool, dryRun bool) error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
@@ -93,6 +95,10 @@ func runPlan(app *appContext, plan *orchestrate.Plan, jsonFlag *bool, quiet bool
 	maxRetries := plan.Settings.MaxRetries
 	if maxRetries <= 0 {
 		maxRetries = 2
+	}
+
+	if dryRun {
+		quiet = false
 	}
 
 	// Start web dashboard if requested.
@@ -137,6 +143,10 @@ func runPlan(app *appContext, plan *orchestrate.Plan, jsonFlag *bool, quiet bool
 			name = "plan"
 		}
 		fmt.Print(cost.FormatPreRun(name, preRunItems))
+
+		if dryRun {
+			return nil
+		}
 
 		if !plan.Settings.AutoApprove {
 			fmt.Print("\nProceed? [Y/n] ")
@@ -256,7 +266,7 @@ func runSpawnAndDispatch(app *appContext, plan *orchestrate.Plan, task *orchestr
 	if agentType == "" {
 		agentType = plan.Settings.DefaultAgent
 	}
-	ag := agent.GetWithModel(st.decision.Model, agentType)
+	ag := agent.GetWithOpts(st.decision.Model, agentType, plan.Settings.FullAuto)
 
 	// Spawn workspace.
 	baseBranch := "main"
@@ -524,7 +534,7 @@ func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Tas
 			if retryAgent == "" {
 				retryAgent = plan.Settings.DefaultAgent
 			}
-			ag := agent.GetWithModel(st.decision.Model, retryAgent)
+			ag := agent.GetWithOpts(st.decision.Model, retryAgent, plan.Settings.FullAuto)
 			prompt := task.Prompt + "\n\nWhen you are done:\n1. git add and commit all your changes with a descriptive message\n2. Do not leave uncommitted files."
 
 			go func() {
@@ -614,7 +624,7 @@ func runAutoApprove(app *appContext, plan *orchestrate.Plan, states map[string]*
 		if agentType == "" {
 			agentType = plan.Settings.DefaultAgent
 		}
-		ag := agent.GetWithModel(model, agentType)
+		ag := agent.GetWithOpts(model, agentType, plan.Settings.FullAuto)
 		lastActivity := app.term.PaneLastActivity(task.ID)
 		state := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 5*time.Second)
 

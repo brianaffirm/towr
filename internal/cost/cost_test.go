@@ -17,9 +17,16 @@ func TestCalculate(t *testing.T) {
 		usage TokenUsage
 		want  float64
 	}{
-		{"opus", TokenUsage{InputTokens: 10000, OutputTokens: 30000}, 2.40},
+		// Opus 4.6: 10K × $5/M + 30K × $25/M = $0.05 + $0.75 = $0.80
+		{"opus", TokenUsage{InputTokens: 10000, OutputTokens: 30000}, 0.80},
+		// Sonnet 4.6: 10K × $3/M + 30K × $15/M = $0.03 + $0.45 = $0.48
 		{"sonnet", TokenUsage{InputTokens: 10000, OutputTokens: 30000}, 0.48},
-		{"haiku", TokenUsage{InputTokens: 10000, OutputTokens: 30000}, 0.04},
+		// Haiku 4.5: 10K × $1/M + 30K × $5/M = $0.01 + $0.15 = $0.16
+		{"haiku", TokenUsage{InputTokens: 10000, OutputTokens: 30000}, 0.16},
+		// Codex-mini: 10K × $0.25/M + 30K × $2.00/M = $0.0025 + $0.06 = $0.0625
+		{"codex-mini", TokenUsage{InputTokens: 10000, OutputTokens: 30000}, 0.0625},
+		// Cursor-auto: 10K × $1.25/M + 30K × $6.00/M = $0.0125 + $0.18 = $0.1925
+		{"cursor-auto", TokenUsage{InputTokens: 10000, OutputTokens: 30000}, 0.1925},
 		{"opus", TokenUsage{InputTokens: 0, OutputTokens: 0}, 0.0},
 	}
 	for _, tt := range tests {

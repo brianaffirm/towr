@@ -3,16 +3,33 @@ package agent
 import "fmt"
 
 // CodexAgent implements the Agent interface for the OpenAI Codex CLI.
-type CodexAgent struct{}
+type CodexAgent struct {
+	ModelFlag string // e.g. "codex-mini", "gpt-5.3-codex", "gpt-5.4"
+	FullAuto  bool   // skip all permission prompts
+}
 
-// Name returns "codex".
-func (c *CodexAgent) Name() string { return "codex" }
+// Name returns "codex" or "codex:<model>" if ModelFlag is set.
+func (c *CodexAgent) Name() string {
+	if c.ModelFlag != "" {
+		return "codex:" + c.ModelFlag
+	}
+	return "codex"
+}
 
 // LaunchCommand returns the shell command to start Codex.
 // --no-alt-screen is required for tmux capture-pane to work
 // (without it, Codex uses the alternate screen buffer which tmux can't capture).
 func (c *CodexAgent) LaunchCommand() string {
-	return "codex --no-alt-screen"
+	cmd := "codex --no-alt-screen"
+	// Only pass -m for non-default models; the default "codex-mini"
+	// may not be available on all accounts (e.g. ChatGPT auth).
+	if c.ModelFlag != "" && c.ModelFlag != "codex-mini" {
+		cmd += " -m " + c.ModelFlag
+	}
+	if c.FullAuto {
+		cmd += " --full-auto"
+	}
+	return cmd
 }
 
 // LaunchEnv returns no extra environment variables.

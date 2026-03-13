@@ -1,0 +1,17 @@
+name: "cost-display-test"
+tasks:
+  - id: readme-typo
+    prompt: "Fix the typo in README.md: change 'controll' to 'control' on line 1. Just make this one fix, commit, and stop."
+
+  - id: add-comment
+    prompt: "Add a single-line comment '// cost-test marker' to the top of cmd/towr/main.go, commit, and stop."
+    model: sonnet
+
+  - id: list-files
+    prompt: "Run 'ls -la' in the repo root and report what you see. Do not change any files."
+    model: opus
+
+settings:
+  auto_approve: true
+  web: true
+  web_addr: ":8090"
