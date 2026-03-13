@@ -140,6 +140,61 @@ func newWebCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comma
 				json.NewEncoder(w).Encode(events)
 			})
 
+			mux.HandleFunc("/api/cost", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if app == nil {
+					json.NewEncoder(w).Encode(costSummary{Tasks: []costTaskItem{}})
+					return
+				}
+
+				events, err := app.store.QueryEvents(store.EventQuery{Kind: store.EventTaskCost, RepoRoot: app.repoRoot})
+				if err != nil {
+					json.NewEncoder(w).Encode(costSummary{Tasks: []costTaskItem{}})
+					return
+				}
+
+				var summary costSummary
+				summary.Tasks = make([]costTaskItem, 0, len(events))
+
+				for _, ev := range events {
+					item := costTaskItem{
+						ID: ev.WorkspaceID,
+					}
+					if v, ok := ev.Data["model"].(string); ok {
+						item.Model = v
+					}
+					if v, ok := ev.Data["route_reason"].(string); ok {
+						item.Reason = v
+					}
+					if v, ok := ev.Data["input_tokens"].(float64); ok {
+						item.InputTokens = int(v)
+					}
+					if v, ok := ev.Data["output_tokens"].(float64); ok {
+						item.OutputTokens = int(v)
+					}
+					if v, ok := ev.Data["estimated_cost"].(float64); ok {
+						item.Cost = v
+					}
+					if v, ok := ev.Data["opus_baseline"].(float64); ok {
+						item.OpusCost = v
+					}
+					if v, ok := ev.Data["token_source"].(string); ok {
+						item.Source = v
+					}
+					summary.TotalSpent += item.Cost
+					summary.TotalOpus += item.OpusCost
+					summary.Tasks = append(summary.Tasks, item)
+				}
+
+				summary.TotalSaved = summary.TotalOpus - summary.TotalSpent
+				if summary.TotalOpus > 0 {
+					summary.SavingsPercent = summary.TotalSaved / summary.TotalOpus * 100
+				}
+				// Budget: always 0 in Phase 1 (not yet stored in events)
+
+				json.NewEncoder(w).Encode(summary)
+			})
+
 			mux.HandleFunc("/api/workspace/", func(w http.ResponseWriter, r *http.Request) {
 				// Expect /api/workspace/{id}/safety
 				rest := strings.TrimPrefix(r.URL.Path, "/api/workspace/")
@@ -381,6 +436,26 @@ type safetySummary struct {
 	Bypasses     int    `json:"bypasses"`
 	FilesChanged int    `json:"files_changed"`
 	SafetyLevel  string `json:"safety_level"`
+}
+
+type costSummary struct {
+	TotalSpent     float64        `json:"totalSpent"`
+	TotalOpus      float64        `json:"totalOpus"`
+	TotalSaved     float64        `json:"totalSaved"`
+	SavingsPercent float64        `json:"savingsPercent"`
+	Budget         float64        `json:"budget"`
+	Tasks          []costTaskItem `json:"tasks"`
+}
+
+type costTaskItem struct {
+	ID           string  `json:"id"`
+	Model        string  `json:"model"`
+	Reason       string  `json:"reason"`
+	InputTokens  int     `json:"inputTokens"`
+	OutputTokens int     `json:"outputTokens"`
+	Cost         float64 `json:"cost"`
+	OpusCost     float64 `json:"opusCost"`
+	Source       string  `json:"source"`
 }
 
 // buildSafetySummary computes safety metrics from workspace events.
