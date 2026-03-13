@@ -173,6 +173,15 @@ header h1 {
   color: var(--text-secondary);
   white-space: nowrap;
 }
+.ws-model-badge {
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border: 1px solid;
+  border-radius: 4px;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
 .ws-step {
   font-size: 0.7rem;
   color: var(--text-muted);

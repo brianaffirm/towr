@@ -243,41 +243,67 @@ func runSpawnAndDispatch(app *appContext, plan *orchestrate.Plan, task *orchestr
 		Data: map[string]interface{}{"dispatch_id": dispID, "prompt": prompt, "model": model, "agent": agentName},
 	})
 
-	// Launch agent directly in the tmux pane and paste the prompt.
+	// Launch agent and keep approving dialogs until task completes.
 	go func() {
-		// Send launch command.
-		launchCmd := ag.LaunchCommand()
-		_ = app.term.PasteBuffer(task.ID, launchCmd)
-		time.Sleep(500 * time.Millisecond)
-		_ = app.term.SendKeys(task.ID, "Enter")
-
-		// Wait for agent to start (check for idle pattern).
+		id := task.ID
+		indicators := ag.DialogIndicators()
 		startupKey := ag.StartupKey()
+
+		// Phase 1: launch agent.
+		_ = app.term.PasteBuffer(id, ag.LaunchCommand())
+		time.Sleep(500 * time.Millisecond)
+		_ = app.term.SendKeys(id, "Enter")
+
+		// Phase 2: wait for startup, handle trust dialogs.
 		for i := 0; i < 40; i++ {
 			time.Sleep(1500 * time.Millisecond)
-			captured, err := app.term.CapturePane(task.ID, 50)
-			if err != nil {
+			captured, _ := app.term.CapturePane(id, 50)
+			if captured == "" {
 				continue
 			}
-			// Handle trust/startup dialogs.
-			for _, pattern := range ag.StartupDialogs() {
-				if strings.Contains(captured, pattern) {
-					_ = app.term.SendKeys(task.ID, startupKey)
+			for _, p := range ag.StartupDialogs() {
+				if strings.Contains(captured, p) {
+					_ = app.term.SendKeys(id, startupKey)
 					time.Sleep(1 * time.Second)
 					break
 				}
 			}
-			// Check if agent is ready.
 			if strings.Contains(captured, ag.IdlePattern()) {
 				break
 			}
 		}
 
-		// Send the prompt.
+		// Phase 3: send prompt.
 		time.Sleep(500 * time.Millisecond)
-		_ = app.term.PasteBuffer(task.ID, prompt)
+		_ = app.term.PasteBuffer(id, prompt)
 		time.Sleep(500 * time.Millisecond)
-		_ = app.term.SendKeys(task.ID, "Enter")
+		_ = app.term.SendKeys(id, "Enter")
+
+		// Phase 4: keep approving dialogs every 3s until task completes.
+		for {
+			time.Sleep(3 * time.Second)
+			if st.status == "completed" || st.status == "failed" {
+				return
+			}
+			captured, err := app.term.CapturePane(id, 200)
+			if err != nil {
+				continue
+			}
+			// Check for blocked dialogs.
+			for _, pattern := range indicators {
+				if strings.Contains(captured, pattern) {
+					approveKey := "Enter"
+					if strings.Contains(captured, "Run this command?") || strings.Contains(captured, "Run (once)") {
+						approveKey = "y"
+					} else if strings.Contains(captured, "Trust this workspace") {
+						approveKey = "a"
+					}
+					_ = app.term.SendKeys(id, approveKey)
+					fmt.Printf("[%s] ✓ %s: auto-approved\n", fmtTime(), id)
+					break
+				}
+			}
+		}
 	}()
 
 	st.status = "running"

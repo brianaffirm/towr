@@ -140,7 +140,15 @@
       html += '<div class="' + cls + '" data-id="' + esc(ws.id) + '" style="border-left-color:' + c + '">';
       html += '<div class="status-dot" style="background:' + c + '"></div>';
       html += '<span class="ws-name">' + esc(ws.id) + '</span>';
-      if (ws.agent) html += '<span class="ws-agent">' + esc(ws.agent) + '</span>';
+      if (ws.agent) {
+        var agentLabel = ws.agent;
+        var agentColor = "var(--text-muted)";
+        if (agentLabel.indexOf("sonnet") >= 0) agentColor = "#a78bfa";
+        else if (agentLabel.indexOf("opus") >= 0) agentColor = "#f59e0b";
+        else if (agentLabel.indexOf("cursor") >= 0) agentColor = "#06b6d4";
+        else if (agentLabel.indexOf("codex") >= 0) agentColor = "#10b981";
+        html += '<span class="ws-model-badge" style="color:' + agentColor + ';border-color:' + agentColor + '44">' + esc(agentLabel) + '</span>';
+      }
       html += '<span class="ws-step">' + esc(ws.task || "-") + '</span>';
       html += '<span class="shield" data-shield="' + esc(ws.id) + '"></span>';
       html += '<span class="ws-badge" style="color:' + c + ';background:' + c + '22">' + esc(ws.status) + '</span>';
