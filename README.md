@@ -27,6 +27,23 @@ This run cost $3.48. Opus-for-everything would have cost $14.40. **towr saved yo
 
 towr is the governance layer between your AI agents and your main branch. It routes tasks to the cheapest model likely to succeed, validates every merge with hooks and tests, audits every action, and shows you what you saved. Nothing lands without validation. Nothing spends without visibility.
 
+towr works with **any agent runtime** — Claude Code, Cursor, Codex, Aider, or anything that runs in a terminal. Mix them per task in the same plan. Each agent gets its own sandboxed worktree; towr handles the isolation, merging, and audit trail regardless of which tool wrote the code.
+
+```yaml
+tasks:
+  - id: backend
+    prompt: "Implement the API layer"
+    agent: claude-code           # default
+  - id: frontend
+    prompt: "Build the settings UI"
+    agent: cursor                # Cursor CLI
+  - id: data-migration
+    prompt: "Write the DB migration"
+    agent: codex                 # Codex CLI
+settings:
+  default_agent: claude-code     # tasks without agent: use this
+```
+
 ## Three pillars
 
 ### 1. Smart router — the brain
@@ -119,6 +136,7 @@ Agents work in sandboxed git worktrees. They can't touch main, other workspaces,
 | Layer | What it does |
 |---|---|
 | **Workspace isolation** | Each agent gets its own git worktree — changes are on a branch, never on main |
+| **Sandbox per runtime** | Claude: scoped allowlist. Cursor: sandbox mode. Codex: `workspace-write`. Each runtime's native safety model is enforced. |
 | **Pre-land hooks** | Tests run before any merge. Fail = blocked. Nothing lands dirty. |
 | **Protected branches** | Agents create PRs, humans merge. No direct push to main. |
 | **Approval visibility** | Every auto-approval logged in the activity feed with what was approved and when |
@@ -137,6 +155,7 @@ tasks:
     prompt: "Implement JWT middleware in internal/auth/"
   - id: api-endpoints
     prompt: "Add CRUD endpoints for the user resource"
+    agent: cursor                # use Cursor for this task
   - id: unit-tests
     prompt: "Write unit tests for internal/auth/"
     depends_on: [auth-middleware]
@@ -144,6 +163,7 @@ tasks:
     prompt: "Run go test ./... and fix failures"
     depends_on: [auth-middleware, api-endpoints, unit-tests]
 settings:
+  default_agent: claude-code
   auto_approve: true
   create_pr: true
   budget: 10.00
