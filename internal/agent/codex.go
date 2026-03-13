@@ -21,7 +21,9 @@ func (c *CodexAgent) Name() string {
 // (without it, Codex uses the alternate screen buffer which tmux can't capture).
 func (c *CodexAgent) LaunchCommand() string {
 	cmd := "codex --no-alt-screen"
-	if c.ModelFlag != "" {
+	// Only pass -m for non-default models; the default "codex-mini"
+	// may not be available on all accounts (e.g. ChatGPT auth).
+	if c.ModelFlag != "" && c.ModelFlag != "codex-mini" {
 		cmd += " -m " + c.ModelFlag
 	}
 	if c.FullAuto {

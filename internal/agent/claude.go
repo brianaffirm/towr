@@ -26,7 +26,10 @@ func (c *ClaudeCode) LaunchCommand() string {
 		cmd += " --model " + c.ModelFlag
 	}
 	if c.FullAuto {
-		cmd += " --dangerously-skip-permissions"
+		// Use allowedTools to pre-approve everything instead of
+		// --dangerously-skip-permissions which can conflict with
+		// Claude's interactive TUI in tmux.
+		cmd += " --allowedTools 'Bash(*) Edit Write Read Glob Grep Agent'"
 	}
 	return cmd
 }
