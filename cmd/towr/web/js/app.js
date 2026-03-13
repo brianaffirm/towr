@@ -1,5 +1,6 @@
-(function() {
+(function () {
   "use strict";
+
   var STATUS_COLORS = {
     RUNNING: "#58a6ff", SPAWNED: "#58a6ff",
     READY: "#3fb950", MERGED: "#3fb950", LANDED: "#3fb950",
@@ -7,18 +8,11 @@
     STALE: "#8b949e", ORPHANED: "#8b949e", IDLE: "#8b949e"
   };
   var DEFAULT_COLOR = "#8b949e";
+  var PAGE_LOAD = Date.now();
+  var lastJSON = "";
+  var safetyCache = {};
 
-  function statusColor(s) { return STATUS_COLORS[(s||"").toUpperCase()] || DEFAULT_COLOR; }
-
-  function zone(status) {
-    var s = (status||"").toUpperCase();
-    if (s === "RUNNING" || s === "SPAWNED") return "working";
-    if (s === "BLOCKED" || s === "FAILED" || s === "ERROR" || s === "STALE" || s === "ORPHANED") return "attention";
-    if (s === "READY" || s === "MERGED" || s === "LANDED") return "completed";
-    return "working";
-  }
-
-  function badgeBg(color) { return color + "22"; }
+  function statusColor(s) { return STATUS_COLORS[(s || "").toUpperCase()] || DEFAULT_COLOR; }
 
   function esc(s) {
     var d = document.createElement("span");
@@ -26,158 +20,188 @@
     return d.innerHTML;
   }
 
-  var startTime = new Date();
-  var safetyCache = {};
+  function sortPriority(status) {
+    var s = (status || "").toUpperCase();
+    if (s === "BLOCKED" || s === "FAILED" || s === "ERROR") return 0;
+    if (s === "RUNNING" || s === "SPAWNED") return 1;
+    if (s === "STALE" || s === "ORPHANED" || s === "IDLE") return 2;
+    return 3;
+  }
 
+  function isCompleted(s) { var u = (s || "").toUpperCase(); return u === "READY" || u === "MERGED" || u === "LANDED"; }
+  function isBlocked(s) { var u = (s || "").toUpperCase(); return u === "BLOCKED" || u === "FAILED" || u === "ERROR"; }
+  function isWorking(s) { var u = (s || "").toUpperCase(); return u === "RUNNING" || u === "SPAWNED"; }
+
+  function parseAgeMinutes(age) {
+    if (!age) return 0;
+    var m = 0;
+    var hMatch = age.match(/(\d+)h/);
+    var mMatch = age.match(/(\d+)m/);
+    if (hMatch) m += parseInt(hMatch[1], 10) * 60;
+    if (mMatch) m += parseInt(mMatch[1], 10);
+    return m;
+  }
+
+  function completedClass(age) {
+    var mins = parseAgeMinutes(age);
+    if (mins <= 30) return "completed";
+    if (mins <= 120) return "completed aged-1";
+    return "completed aged-2";
+  }
+
+  function uptimeStr() {
+    var sec = Math.floor((Date.now() - PAGE_LOAD) / 1000);
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return m > 0 ? m + "m " + s + "s" : s + "s";
+  }
+
+  // --- Safety ---
   function fetchSafety(id) {
     fetch("/api/workspace/" + encodeURIComponent(id) + "/safety")
-      .then(function(r) { return r.json(); })
-      .then(function(s) { safetyCache[id] = s; updateShield(id, s); })
-      .catch(function() {});
+      .then(function (r) { return r.json(); })
+      .then(function (s) {
+        safetyCache[id] = s;
+        var el = document.querySelector('[data-shield="' + id + '"]');
+        if (el) renderShield(el, s);
+      })
+      .catch(function () {});
   }
 
-  function shieldInfo(s) {
-    if (s.bypasses > 0) return { icon: "\uD83D\uDFE0", color: "#f85149", label: "bypass detected" };
-    if (s.approvals > 0) return { icon: "\uD83D\uDFE1", color: "#d29922", label: s.approvals + " auto-approval" + (s.approvals > 1 ? "s" : "") };
-    return { icon: "\uD83D\uDFE2", color: "#3fb950", label: "fully sandboxed" };
+  function renderShield(el, s) {
+    var icon = "\uD83D\uDEE1\uFE0F";
+    if (s.bypasses > 0) {
+      el.innerHTML = icon + ' <span style="color:#f85149;font-size:0.7rem">bypass</span>';
+      el.title = "bypasses: " + s.bypasses + "\nagent: " + (s.agent || "-") + "\nsandbox: " + (s.sandbox || "-");
+    } else if (s.approvals > 0) {
+      el.innerHTML = icon + ' <span style="color:#d29922;font-size:0.7rem">' + s.approvals + " approved</span>";
+      el.title = "approvals: " + s.approvals + "\nagent: " + (s.agent || "-") + "\nsandbox: " + (s.sandbox || "-");
+    } else {
+      el.innerHTML = icon + ' <span style="color:#3fb950;font-size:0.7rem">sandboxed</span>';
+      el.title = "fully sandboxed\nagent: " + (s.agent || "-") + "\nsandbox: " + (s.sandbox || "-");
+    }
   }
 
-  function updateShield(id, s) {
-    var el = document.querySelector('[data-shield="' + id + '"]');
-    if (!el) return;
-    var info = shieldInfo(s);
-    el.style.color = info.color;
-    el.innerHTML = info.icon + '<span class="shield-tooltip">' + esc(info.label) +
-      (s.approvals ? '<br>approvals: ' + s.approvals : '') +
-      (s.bypasses ? '<br>bypasses: ' + s.bypasses : '') + '</span>';
-  }
-
-  function renderStats(data) {
-    var total = (data || []).length;
-    var working = 0, idle = 0, blocked = 0;
-    (data || []).forEach(function(ws) {
-      var s = (ws.status||"").toUpperCase();
-      if (s === "RUNNING" || s === "SPAWNED") working++;
-      else if (s === "BLOCKED" || s === "FAILED" || s === "ERROR" || s === "STALE" || s === "ORPHANED") blocked++;
-      else idle++;
-    });
-    var now = new Date();
-    var uptimeSec = Math.floor((now - startTime) / 1000);
-    var uptimeMin = Math.floor(uptimeSec / 60);
-    var uptimeStr = uptimeMin > 0 ? uptimeMin + "m " + (uptimeSec % 60) + "s" : uptimeSec + "s";
-    var timeStr = now.toLocaleTimeString();
+  // --- Counters ---
+  function renderCounters(data) {
+    var total = data.length, working = 0, blocked = 0, completed = 0;
     var totalApprovals = 0, totalBypasses = 0;
-    Object.keys(safetyCache).forEach(function(k) {
-      totalApprovals += (safetyCache[k].approvals || 0);
-      totalBypasses += (safetyCache[k].bypasses || 0);
+    data.forEach(function (ws) {
+      if (isWorking(ws.status)) working++;
+      else if (isBlocked(ws.status)) blocked++;
+      else if (isCompleted(ws.status)) completed++;
+      else completed++; // IDLE counts as completed
     });
-    var bypassColor = totalBypasses > 0 ? "#f85149" : "#3fb950";
-    var bypassClass = totalBypasses > 0 ? ' stat-pulse' : '';
-    var bar = document.getElementById("statsBar");
-    bar.innerHTML =
-      '<span class="stat-pill" style="color:#c9d1d9;background:#30363d">' + total + ' total</span>' +
-      '<span class="stat-pill" style="color:#58a6ff;background:#58a6ff22">' + working + ' working</span>' +
-      '<span class="stat-pill" style="color:#8b949e;background:#8b949e22">' + idle + ' idle</span>' +
-      '<span class="stat-pill" style="color:#f85149;background:#f8514922">' + blocked + ' blocked</span>' +
-      '<span class="stat-pill" style="color:#3fb950;background:#3fb95022">' + totalApprovals + ' approvals</span>' +
-      '<span class="stat-pill' + bypassClass + '" style="color:' + bypassColor + ';background:' + bypassColor + '22">' + totalBypasses + ' bypasses</span>' +
-      '<span class="stat-meta">uptime ' + esc(uptimeStr) + ' &middot; refreshed ' + esc(timeStr) + '</span>';
-  }
+    Object.keys(safetyCache).forEach(function (k) {
+      totalApprovals += safetyCache[k].approvals || 0;
+      totalBypasses += safetyCache[k].bypasses || 0;
+    });
 
-  function render(data) {
-    renderStats(data);
-    var groups = { working: [], attention: [], completed: [] };
-    (data || []).forEach(function(ws) { groups[zone(ws.status)].push(ws); });
-
-    var zoneConfig = [
-      { key: "working", title: "Working", color: "#58a6ff" },
-      { key: "attention", title: "Needs Attention", color: "#f85149" },
-      { key: "completed", title: "Completed", color: "#3fb950" }
+    var items = [
+      { value: total, label: "total", color: "var(--text-primary)" },
+      { value: working, label: "working", color: "var(--accent-blue)" },
+      { value: blocked, label: "blocked", color: "var(--accent-red)" },
+      { value: completed, label: "completed", color: "var(--accent-green)" },
+      { value: totalBypasses, label: "bypasses", color: totalBypasses > 0 ? "var(--accent-red)" : "var(--accent-green)" },
+      { value: totalApprovals, label: "approvals", color: "var(--text-primary)" }
     ];
 
     var html = "";
-    var hasAny = false;
-    zoneConfig.forEach(function(z) {
-      var items = groups[z.key];
-      if (items.length === 0) return;
-      hasAny = true;
-      html += '<div class="zone">';
-      html += '<div class="zone-title" style="color:' + esc(z.color) + '">' + esc(z.title) +
-              ' <span class="count">(' + items.length + ')</span></div>';
-      html += '<div class="cards">';
-      items.forEach(function(ws) {
-        var c = statusColor(ws.status);
-        var isActive = ws.id === window.activeTerminalId;
-        html += '<div class="card' + (isActive ? ' active' : '') + '" data-id="' + esc(ws.id) + '">';
-        html += '<div class="card-top">';
-        html += '<span class="card-id">' + esc(ws.id) + '</span>';
-        html += '<span class="shield" data-shield="' + esc(ws.id) + '"></span>';
-        html += '<span class="badge" style="color:' + esc(c) + ';background:' + badgeBg(c) + '">' + esc(ws.status) + '</span>';
-        html += '</div>';
-        html += '<div class="card-details">';
-        html += '<span><span class="label">task</span> ' + esc(ws.task) + '</span>';
-        html += '<span><span class="label">diff</span> ' + esc(ws.diff) + '</span>';
-        html += '<span><span class="label">age</span> ' + esc(ws.age) + '</span>';
-        html += '</div>';
-        var su = (ws.status||"").toUpperCase();
-        if (su === "BLOCKED" || su === "RUNNING" || su === "SPAWNED") {
-          html += '<div class="card-actions">';
-          html += '<button data-approve="' + esc(ws.id) + '">approve</button>';
-          html += '<input data-send-input="' + esc(ws.id) + '" placeholder="message\u2026" onclick="event.stopPropagation()">';
-          html += '<button data-send="' + esc(ws.id) + '">send</button>';
-          html += '</div>';
-        }
-        html += '</div>';
-      });
-      html += '</div></div>';
+    items.forEach(function (item) {
+      html += '<div class="counter">';
+      html += '<div class="counter-value" style="color:' + item.color + '">' + item.value + '</div>';
+      html += '<div class="counter-label">' + item.label + '</div>';
+      html += '</div>';
     });
-    if (!hasAny) {
-      html = '<div class="empty-state">No workspaces found.</div>';
-    }
-    document.getElementById("sidebar").innerHTML = html;
+    html += '<div class="counter"><div class="counter-value" style="font-size:14px;color:var(--text-secondary)">' + uptimeStr() + '</div><div class="counter-label">uptime</div></div>';
 
-    document.querySelectorAll(".card").forEach(function(el) {
-      el.addEventListener("click", function() {
-        var id = el.getAttribute("data-id");
-        window.activeTerminalId = id;
-        window.openTerminal(id, id);
-      });
-    });
-    document.querySelectorAll("[data-approve]").forEach(function(btn) {
-      btn.addEventListener("click", function(e) {
-        e.stopPropagation();
-        fetch("/api/workspaces/" + encodeURIComponent(btn.getAttribute("data-approve")) + "/approve", {method:"POST"});
-      });
-    });
-    // Fetch safety status for each workspace
-    (data || []).forEach(function(ws) { fetchSafety(ws.id); });
-    document.querySelectorAll("[data-send]").forEach(function(btn) {
-      btn.addEventListener("click", function(e) {
-        e.stopPropagation();
-        var id = btn.getAttribute("data-send");
-        var input = document.querySelector("[data-send-input='" + id + "']");
-        if (!input || !input.value) return;
-        fetch("/api/workspaces/" + encodeURIComponent(id) + "/send", {
-          method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({message: input.value})
-        });
-        input.value = "";
-      });
-    });
+    document.getElementById("counters").innerHTML = html;
   }
 
+  // --- Workspace list ---
+  function renderWorkspaces(data) {
+    var sorted = data.slice().sort(function (a, b) {
+      return sortPriority(a.status) - sortPriority(b.status);
+    });
 
-  // Export audit CSV
-  document.getElementById("exportAudit").addEventListener("click", function() {
-    window.location.href = "/api/audit/export?format=csv&since=168h";
+    if (sorted.length === 0) {
+      document.getElementById("workspaceList").innerHTML =
+        '<div style="text-align:center;padding:60px 20px;color:var(--text-muted);">No workspaces running. Start with: towr orchestrate plan.yaml</div>';
+      return;
+    }
+
+    var html = "";
+    sorted.forEach(function (ws) {
+      var c = statusColor(ws.status);
+      var cls = "ws-row";
+      if (isBlocked(ws.status)) cls += " blocked";
+      else if (isCompleted(ws.status) || ws.status.toUpperCase() === "IDLE") cls += " " + completedClass(ws.age);
+
+      html += '<div class="' + cls + '" data-id="' + esc(ws.id) + '" style="border-left-color:' + c + '">';
+      html += '<div class="status-dot" style="background:' + c + '"></div>';
+      html += '<span class="ws-name">' + esc(ws.id) + '</span>';
+      if (ws.agent) html += '<span class="ws-agent">' + esc(ws.agent) + '</span>';
+      html += '<span class="ws-step">' + esc(ws.task || "-") + '</span>';
+      html += '<span class="shield" data-shield="' + esc(ws.id) + '"></span>';
+      html += '<span class="ws-badge" style="color:' + c + ';background:' + c + '22">' + esc(ws.status) + '</span>';
+      if (ws.diff && ws.diff !== "-") html += '<span class="ws-agent">' + esc(ws.diff) + '</span>';
+      html += '<span class="ws-agent">' + esc(ws.age) + '</span>';
+      if (isBlocked(ws.status)) {
+        html += '<button class="btn-accent" data-approve="' + esc(ws.id) + '" style="margin-left:auto">Approve</button>';
+      }
+      html += '</div>';
+    });
+
+    var list = document.getElementById("workspaceList");
+    // Don't rebuild DOM if a workspace is expanded (would destroy the panel).
+    if (document.querySelector(".workspace-expanded")) return;
+    if (list._lastHTML !== html) {
+      list._lastHTML = html;
+      list.innerHTML = html;
+
+      // Bind events
+      document.querySelectorAll(".ws-row").forEach(function (el) {
+        el.addEventListener("click", function (e) {
+          if (e.target.closest("button, .shield")) return;
+          var id = el.getAttribute("data-id");
+          if (typeof window.expandWorkspace === "function") window.expandWorkspace(id);
+        });
+      });
+      document.querySelectorAll("[data-approve]").forEach(function (btn) {
+        btn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          fetch("/api/workspaces/" + encodeURIComponent(btn.getAttribute("data-approve")) + "/approve", { method: "POST" });
+        });
+      });
+    }
+  }
+
+  // --- Main render ---
+  function render(data) {
+    var json = JSON.stringify(data);
+    renderCounters(data);
+    if (json !== lastJSON) {
+      lastJSON = json;
+      renderWorkspaces(data);
+      (data || []).forEach(function (ws) { fetchSafety(ws.id); });
+    } else {
+      // Just update uptime
+      var el = document.querySelector('.counter-label');
+    }
+  }
+
+  // --- Export ---
+  document.getElementById("exportAudit").addEventListener("click", function () {
+    window.location.href = "/api/audit/export?format=csv&since=7d";
   });
 
+  // --- Poll ---
   function poll() {
-    fetch("/api/workspaces").then(function(r) { return r.json(); }).then(render).catch(function() {});
-    fetch("/api/events").then(function(r) { return r.json(); }).then(function(events) {
+    fetch("/api/workspaces").then(function (r) { return r.json(); }).then(render).catch(function () {});
+    fetch("/api/events").then(function (r) { return r.json(); }).then(function (events) {
       if (typeof renderActivity === "function") renderActivity(events);
-    }).catch(function() {});
-    setTimeout(poll, 5000);
+    }).catch(function () {});
+    setTimeout(poll, 4000);
   }
   poll();
 })();

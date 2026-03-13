@@ -1,0 +1,101 @@
+[   31851ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[   32618ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:73:34)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[   33393ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[   34092ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[   39103ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:73:34)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[   40003ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[   40661ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[   41112ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[   41603ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[   42045ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[   44652ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:73:34)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[   45166ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[   48066ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   48066ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[   52068ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   52068ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[   56071ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   56071ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[   60071ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   60071ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[   64075ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   64075ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[   68076ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   68076ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[   72078ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   72078ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[   76076ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   76076ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[   80079ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   80079ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[   84079ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   84079ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[   88082ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   88082ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[   92084ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   92084ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[   96084ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/workspaces:0
+[   96084ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8090/api/events:0
+[  132883ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[  133508ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:73:34)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[  134500ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:73:34)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[  135027ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[  135941ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[  136658ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[  137316ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[  138316ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:73:34)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[  139658ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:73:34)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[  190841ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[  191841ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[  192466ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)
+[  231615ms] TypeError: Cannot read properties of null (reading 'classList')
+    at window.expandWorkspace (http://127.0.0.1:8090/static/js/workspace.js:81:11)
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8090/static/js/app.js:165:68)

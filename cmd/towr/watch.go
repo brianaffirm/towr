@@ -720,6 +720,19 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 			}
 			if err := app.term.SendKeys(ws.ID, approveKey); err == nil {
 				st.finalStatus = "working"
+				// Record approval in the event store for audit trail.
+				_ = app.store.EmitEvent(store.Event{
+					ID:          uuid.New().String(),
+					Kind:        "task.approved",
+					WorkspaceID: ws.ID,
+					RepoRoot:    app.repoRoot,
+					Timestamp:   now.UTC(),
+					Data: map[string]interface{}{
+						"dialog":      dialogCtx,
+						"approve_key": approveKey,
+						"source":      "watch",
+					},
+				})
 				if *jsonFlag {
 					emitJSON(map[string]interface{}{
 						"time":      formatTime(now),
@@ -758,6 +771,18 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 						reKey = "a"
 					}
 					_ = app.term.SendKeys(ws.ID, reKey)
+					_ = app.store.EmitEvent(store.Event{
+						ID:          uuid.New().String(),
+						Kind:        "task.approved",
+						WorkspaceID: ws.ID,
+						RepoRoot:    app.repoRoot,
+						Timestamp:   time.Now().UTC(),
+						Data: map[string]interface{}{
+							"dialog":      dispatch.ExtractDialogContext(recapture),
+							"approve_key": reKey,
+							"source":      "watch-rapid",
+						},
+					})
 					reDialog := dispatch.ExtractDialogContext(recapture)
 					if !*jsonFlag {
 						fmt.Printf("[%s] \u2713 %s: auto-approved \u2014 %q\n", formatTime(time.Now()), ws.ID, reDialog)

@@ -1,0 +1,3 @@
+[      50ms] TypeError: Cannot read properties of null (reading 'addEventListener')
+    at http://127.0.0.1:8090/static/js/workspace.js:166:39
+    at http://127.0.0.1:8090/static/js/workspace.js:167:3

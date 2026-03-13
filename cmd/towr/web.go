@@ -434,4 +434,3 @@ func writeCSVTo(w http.ResponseWriter, events []Event) {
 	}
 	cw.Flush()
 }
-

@@ -4,32 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>towr — dashboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='4' y='20' width='6' height='12' rx='1' fill='%2310b981'/><rect x='13' y='12' width='6' height='20' rx='1' fill='%2310b981'/><rect x='22' y='4' width='6' height='28' rx='1' fill='%2310b981'/></svg>">
 <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 <header>
-  <h1>towr</h1>
+  <div class="header-left">
+    <h1>towr</h1>
+    <span class="live-badge"><span class="dot"></span>live</span>
+    <span class="header-meta" id="uptime"></span>
+  </div>
   <div class="header-right">
     <button class="btn-ghost" id="exportAudit">Export Audit</button>
-    <span class="header-meta"><span class="dot"></span>live &middot; refreshing every 5s</span>
   </div>
 </header>
-<div class="stats-bar" id="statsBar"></div>
-<div class="layout">
-  <div class="sidebar" id="sidebar"></div>
-  <div class="terminal-panel" id="termPanel">
-    <div class="terminal-header">
-      <span id="termTitle">terminal</span>
-      <button class="terminal-close" id="termClose">close</button>
-    </div>
-    <div class="terminal-body" id="termBody"></div>
-  </div>
-</div>
-<div class="activity-log">
+<div class="counters" id="counters"></div>
+<main class="workspace-list" id="workspaceList"></main>
+<div class="activity-drawer">
   <div class="activity-toggle" id="actToggle"><span><span class="arrow">&#9654;</span>Activity Log <span id="actCount"></span></span></div>
   <div class="activity-feed" id="actFeed"></div>
 </div>
-<script src="/static/js/terminal.js"></script>
+<script src="/static/js/workspace.js"></script>
 <script src="/static/js/activity.js"></script>
 <script src="/static/js/app.js"></script>
 </body>

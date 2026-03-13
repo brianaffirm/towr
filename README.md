@@ -427,14 +427,26 @@ towr web                    # http://127.0.0.1:8090
 towr web --addr :9000       # custom port
 ```
 
-- **Workspace cards** grouped by attention zone: Working (blue), Needs Attention (red), Completed (green)
-- **Safety shields** on each card — green (fully sandboxed), yellow (auto-approvals used), red (bypass detected). Hover for approval/bypass counts.
-- **Live terminal view** — click any card to stream its tmux output in real-time
-- **Activity feed** — reverse-chronological event log with color-coded entries. Approvals show green checkmarks, blocks show red X, bypasses get a red left-border and `[BYPASS]` tag.
-- **Stats bar** — total/working/blocked/completed counts, plus total approvals and bypasses (red pulsing when bypasses > 0)
-- **Export Audit** — one-click CSV download of the last 7 days of audit events
-- **Action buttons** — approve permission dialogs and send messages from the browser
-- **Auto-refresh** every 5s, dark theme, responsive, zero external dependencies
+**Command Center overview** — score cards, urgency-sorted workspace list, safety shields:
+
+![Dashboard Overview](docs/images/dashboard-overview.png)
+
+**Click to expand** — structured step view showing what the agent is doing, with Send and Raw terminal controls:
+
+![Expanded Workspace](docs/images/dashboard-expanded.png)
+
+**Activity log** — grouped approvals, color-coded events, workspace badges:
+
+![Activity Log](docs/images/dashboard-activity.png)
+
+Features:
+- **Score cards** — total, working, blocked, completed, bypasses, approvals at a glance
+- **Urgency sort** — blocked first (red glow), working second, completed last (fading opacity)
+- **Safety shields** — 🛡️ sandboxed (green), 🛡️ N approved (yellow), 🛡️ bypass (red) on every row
+- **Structured steps** — click a workspace to see: ✓ Read files → ✓ Created jwt.go → ▶ Running tests
+- **Activity feed** — grouped approvals ("4 auto-approvals"), clean descriptions, bypass highlighting
+- **Export Audit** — one-click CSV download
+- **Auto-refresh** every 4s, dark theme, responsive, zero external dependencies
 
 API endpoints:
 - `GET /api/workspaces` — JSON workspace list for scripting

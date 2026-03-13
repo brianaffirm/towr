@@ -1,0 +1,175 @@
+<h2>Dashboard Layout Direction</h2>
+<p class="subtitle">Which overall structure feels right for towr's dashboard?</p>
+
+<div class="cards">
+  <div class="card" data-choice="kanban" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding:20px;background:#0d1117;border-radius:8px;font-family:monospace;font-size:11px;color:#c9d1d9;">
+        <div style="display:flex;gap:16px;">
+          <div style="flex:1;">
+            <div style="color:#58a6ff;font-weight:bold;margin-bottom:8px;font-size:13px;">WORKING (2)</div>
+            <div style="background:#161b22;border-left:3px solid #58a6ff;padding:10px;border-radius:4px;margin-bottom:8px;">
+              <div style="font-weight:bold;">auth-service</div>
+              <div style="color:#8b949e;font-size:10px;">claude-code · +142/-38 · 12m</div>
+              <div style="color:#58a6ff;font-size:10px;margin-top:4px;">🛡️ sandboxed</div>
+            </div>
+            <div style="background:#161b22;border-left:3px solid #58a6ff;padding:10px;border-radius:4px;">
+              <div style="font-weight:bold;">billing-api</div>
+              <div style="color:#8b949e;font-size:10px;">cursor · +67/-12 · 45m</div>
+              <div style="color:#d29922;font-size:10px;margin-top:4px;">🛡️ 3 approvals</div>
+            </div>
+          </div>
+          <div style="flex:1;">
+            <div style="color:#f85149;font-weight:bold;margin-bottom:8px;font-size:13px;">NEEDS ATTENTION (1)</div>
+            <div style="background:#161b22;border-left:3px solid #f85149;padding:10px;border-radius:4px;">
+              <div style="font-weight:bold;">migration</div>
+              <div style="color:#8b949e;font-size:10px;">codex · blocked · 2m</div>
+              <div style="color:#f85149;font-size:10px;margin-top:4px;">⚠ permission dialog</div>
+            </div>
+          </div>
+          <div style="flex:1;">
+            <div style="color:#3fb950;font-weight:bold;margin-bottom:8px;font-size:13px;">COMPLETED (3)</div>
+            <div style="background:#161b22;border-left:3px solid #3fb950;padding:10px;border-radius:4px;margin-bottom:8px;">
+              <div style="font-weight:bold;">tests</div>
+              <div style="color:#8b949e;font-size:10px;">claude · PR #42 · 5m ago</div>
+            </div>
+            <div style="background:#161b22;border-left:3px solid #3fb950;padding:10px;border-radius:4px;opacity:0.7;margin-bottom:8px;">
+              <div style="font-weight:bold;">docs</div>
+              <div style="color:#8b949e;font-size:10px;">cursor · PR #41 · 15m ago</div>
+            </div>
+            <div style="background:#161b22;border-left:3px solid #3fb950;padding:10px;border-radius:4px;opacity:0.5;">
+              <div style="font-weight:bold;">cache</div>
+              <div style="color:#8b949e;font-size:10px;">codex · PR #40 · 1h ago</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:16px;padding:12px;background:#161b22;border-radius:4px;border-top:1px solid #30363d;">
+          <div style="color:#8b949e;font-size:10px;">TERMINAL: auth-service</div>
+          <div style="color:#3fb950;margin-top:4px;">⏺ Bash(go test ./... -v)</div>
+          <div style="color:#c9d1d9;">  ⎿ === RUN TestJWT ... PASS</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Kanban Columns</h3>
+      <p>Vertical columns by status — like Linear/Jira boards. Working | Attention | Completed. Instant visual scan of what's where. Terminal slides up from bottom.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="command-center" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding:20px;background:#0d1117;border-radius:8px;font-family:monospace;font-size:11px;color:#c9d1d9;">
+        <div style="display:flex;gap:2px;margin-bottom:12px;">
+          <div style="flex:1;text-align:center;padding:8px;background:#161b22;border-radius:4px;">
+            <div style="font-size:24px;font-weight:bold;color:#c9d1d9;">6</div>
+            <div style="font-size:9px;color:#8b949e;">TOTAL</div>
+          </div>
+          <div style="flex:1;text-align:center;padding:8px;background:#161b22;border-radius:4px;">
+            <div style="font-size:24px;font-weight:bold;color:#58a6ff;">2</div>
+            <div style="font-size:9px;color:#8b949e;">WORKING</div>
+          </div>
+          <div style="flex:1;text-align:center;padding:8px;background:#161b22;border-radius:4px;">
+            <div style="font-size:24px;font-weight:bold;color:#f85149;">1</div>
+            <div style="font-size:9px;color:#8b949e;">BLOCKED</div>
+          </div>
+          <div style="flex:1;text-align:center;padding:8px;background:#161b22;border-radius:4px;">
+            <div style="font-size:24px;font-weight:bold;color:#3fb950;">3</div>
+            <div style="font-size:9px;color:#8b949e;">DONE</div>
+          </div>
+          <div style="flex:1;text-align:center;padding:8px;background:#161b22;border-radius:4px;">
+            <div style="font-size:24px;font-weight:bold;color:#3fb950;">0</div>
+            <div style="font-size:9px;color:#8b949e;">BYPASSES</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;">
+          <div style="flex:2;">
+            <div style="display:grid;gap:6px;">
+              <div style="background:#161b22;padding:10px;border-radius:4px;display:flex;align-items:center;gap:10px;">
+                <div style="width:8px;height:8px;border-radius:50%;background:#58a6ff;animation:none;"></div>
+                <div style="flex:1;"><span style="font-weight:bold;">auth</span> <span style="color:#8b949e;font-size:10px;">claude-code</span></div>
+                <div style="color:#58a6ff;font-size:10px;">working 12m</div>
+                <div style="color:#3fb950;font-size:10px;">🛡️</div>
+              </div>
+              <div style="background:#161b22;padding:10px;border-radius:4px;display:flex;align-items:center;gap:10px;">
+                <div style="width:8px;height:8px;border-radius:50%;background:#58a6ff;"></div>
+                <div style="flex:1;"><span style="font-weight:bold;">billing</span> <span style="color:#8b949e;font-size:10px;">cursor</span></div>
+                <div style="color:#58a6ff;font-size:10px;">working 45m</div>
+                <div style="color:#d29922;font-size:10px;">🛡️ 3</div>
+              </div>
+              <div style="background:#161b22;padding:10px;border-radius:4px;display:flex;align-items:center;gap:10px;border:1px solid #f85149;">
+                <div style="width:8px;height:8px;border-radius:50%;background:#f85149;"></div>
+                <div style="flex:1;"><span style="font-weight:bold;">migration</span> <span style="color:#8b949e;font-size:10px;">codex</span></div>
+                <div style="color:#f85149;font-size:10px;">⚠ blocked</div>
+              </div>
+              <div style="background:#161b22;padding:10px;border-radius:4px;display:flex;align-items:center;gap:10px;opacity:0.6;">
+                <div style="width:8px;height:8px;border-radius:50%;background:#3fb950;"></div>
+                <div style="flex:1;"><span style="font-weight:bold;">tests</span> <span style="color:#8b949e;font-size:10px;">claude</span></div>
+                <div style="color:#3fb950;font-size:10px;">✓ PR #42</div>
+              </div>
+            </div>
+          </div>
+          <div style="flex:3;background:#161b22;border-radius:4px;padding:10px;">
+            <div style="color:#8b949e;font-size:10px;margin-bottom:6px;">auth-service — live terminal</div>
+            <div style="color:#3fb950;">⏺ Bash(go test ./... -v)</div>
+            <div>  ⎿ === RUN TestJWT</div>
+            <div>  --- PASS: TestJWT (0.00s)</div>
+            <div style="color:#3fb950;">⏺ All tests passing.</div>
+            <div style="margin-top:8px;color:#8b949e;">❯ _</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Command Center</h3>
+      <p>Big number counters at top. Compact list on left, large terminal panel on right. Optimized for monitoring — like Datadog or Grafana. Dense but clear.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="timeline" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding:20px;background:#0d1117;border-radius:8px;font-family:monospace;font-size:11px;color:#c9d1d9;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
+          <div style="color:#8b949e;">6 workspaces · 2 working · 0 bypasses</div>
+          <div style="color:#3fb950;">● live</div>
+        </div>
+        <div style="position:relative;padding-left:20px;border-left:2px solid #30363d;">
+          <div style="margin-bottom:12px;">
+            <div style="position:absolute;left:-5px;width:8px;height:8px;border-radius:50%;background:#58a6ff;"></div>
+            <div style="color:#58a6ff;font-size:10px;">NOW — working</div>
+            <div style="background:#161b22;padding:10px;border-radius:4px;margin-top:4px;">
+              <div style="font-weight:bold;">auth-service <span style="color:#8b949e;font-weight:normal;font-size:10px;">claude-code · 🛡️ sandboxed</span></div>
+              <div style="color:#8b949e;font-size:10px;margin-top:4px;">Running go test ./... · +142/-38 lines</div>
+            </div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <div style="position:absolute;left:-5px;width:8px;height:8px;border-radius:50%;background:#58a6ff;"></div>
+            <div style="color:#58a6ff;font-size:10px;">NOW — working</div>
+            <div style="background:#161b22;padding:10px;border-radius:4px;margin-top:4px;">
+              <div style="font-weight:bold;">billing-api <span style="color:#8b949e;font-weight:normal;font-size:10px;">cursor · 🛡️ 3 approvals</span></div>
+            </div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <div style="position:absolute;left:-5px;width:8px;height:8px;border-radius:50%;background:#3fb950;"></div>
+            <div style="color:#3fb950;font-size:10px;">5m ago — completed</div>
+            <div style="background:#161b22;padding:10px;border-radius:4px;margin-top:4px;opacity:0.7;">
+              <div style="font-weight:bold;">tests <span style="color:#8b949e;font-weight:normal;font-size:10px;">PR #42 created</span></div>
+            </div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <div style="position:absolute;left:-5px;width:8px;height:8px;border-radius:50%;background:#3fb950;"></div>
+            <div style="color:#3fb950;font-size:10px;">15m ago — completed</div>
+            <div style="background:#161b22;padding:10px;border-radius:4px;margin-top:4px;opacity:0.5;">
+              <div style="font-weight:bold;">docs <span style="color:#8b949e;font-weight:normal;font-size:10px;">PR #41 merged</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Timeline Feed</h3>
+      <p>Vertical timeline showing all workspaces in chronological order. Most recent at top. Like a GitHub activity feed. Great for "what happened overnight" but less useful for real-time monitoring.</p>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:24px;">Click a layout to select it. Consider: which one would you check on your phone at 7am to see if the overnight run succeeded?</p>
