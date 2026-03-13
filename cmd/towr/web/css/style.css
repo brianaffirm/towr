@@ -134,6 +134,13 @@ header h1 { font-size: 1.1rem; color: #58a6ff; font-weight: 600; }
 @keyframes pulse-red { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 .stat-pulse { animation: pulse-red 1.5s ease-in-out infinite; }
 
+/* Activity: dot colors */
+.evt-dot-blue { color: #58a6ff; }
+.evt-dot-green { color: #3fb950; }
+.evt-dot-red { color: #f85149; }
+.evt-dot-yellow { color: #d29922; }
+.evt-dot-muted { color: #8b949e; }
+
 /* Activity: approval/bypass styling */
 .evt-approval { color: #3fb950; font-weight: 600; }
 .evt-block { color: #f85149; font-weight: 600; }

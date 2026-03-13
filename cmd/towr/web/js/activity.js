@@ -2,13 +2,14 @@
 (function() {
   "use strict";
 
-  var DOT_COLORS = {
-    "task.dispatched": "#58a6ff", "task.started": "#58a6ff",
-    "task.completed": "#3fb950", "workspace.landed": "#3fb950",
-    "task.failed": "#f85149",
-    "task.blocked": "#d29922"
+  var DOT_CLASSES = {
+    "task.dispatched": "evt-dot-blue", "task.started": "evt-dot-blue",
+    "task.completed": "evt-dot-green", "workspace.landed": "evt-dot-green",
+    "task.approved": "evt-dot-green",
+    "task.failed": "evt-dot-red",
+    "task.blocked": "evt-dot-yellow"
   };
-  var DEFAULT_DOT = "#8b949e";
+  var DEFAULT_DOT_CLASS = "evt-dot-muted";
 
   var prevIds = {};
 
@@ -35,6 +36,7 @@
       case "task.completed":   return "Completed: " + (d.summary || d.message || "-");
       case "task.failed":      return "Failed: " + (d.summary || d.message || "-");
       case "task.blocked":     return "Blocked: " + (d.dialog || d.message || "-");
+      case "task.approved":    return "Approved: " + (d.summary || d.message || "-");
       case "workspace.created": return "Workspace created";
       case "workspace.landed": return "Landed (merged)";
       default:                 return ev.kind;
@@ -43,6 +45,10 @@
 
   function eventKey(ev) {
     return (ev.id || "") + ":" + ev.kind + ":" + ev.ts;
+  }
+
+  function isBypassEvent(kind) {
+    return kind.indexOf("forced") !== -1 || kind.indexOf("hooks_skipped") !== -1;
   }
 
   // Toggle drawer
@@ -65,16 +71,15 @@
       var key = eventKey(ev);
       newIds[key] = true;
       var isNew = !prevIds[key];
-      var color = DOT_COLORS[ev.kind] || DEFAULT_DOT;
-      var ws = ev.workspace_id || "-";
       var kind = ev.kind || "";
-      var isBypass = kind === "workspace.landing.forced" || kind === "workspace.landing.hooks_skipped" || kind === "workspace.cleanup.forced";
-      var isApproval = kind === "queue.resolved";
+      var bypass = isBypassEvent(kind);
+      var isApproval = kind === "task.approved" || kind === "queue.resolved";
       var isBlock = kind.indexOf("blocked") !== -1;
-      var rowClass = "evt-row" + (isNew ? " evt-new" : "") + (isBypass ? " evt-bypass" : "");
+      var dotClass = DOT_CLASSES[kind] || DEFAULT_DOT_CLASS;
+      var ws = ev.workspace_id || "-";
+      var rowClass = "evt-row" + (isNew ? " evt-new" : "") + (bypass ? " evt-bypass" : "");
 
-      if (isApproval) color = "#3fb950";
-      if (isBlock || isBypass) color = "#f85149";
+      if (bypass) dotClass = "evt-dot-red";
 
       html += '<div class="' + rowClass + '">';
       html += '<span class="evt-ts">' + esc(relativeTime(ev.ts)) + '</span>';
@@ -83,14 +88,14 @@
       } else if (isBlock) {
         html += '<span class="evt-dot evt-block">\u2717</span>';
       } else {
-        html += '<span class="evt-dot" style="color:' + color + '">\u25CF</span>';
+        html += '<span class="evt-dot ' + dotClass + '">\u25CF</span>';
       }
       html += '<span class="evt-ws">' + esc(ws) + '</span>';
       var desc = describeEvent(ev);
       if (isApproval && ev.data && ev.data.command) desc = "Approved: " + ev.data.command;
       if (isBlock && ev.data && ev.data.command) desc = "Blocked: " + ev.data.command;
       html += '<span class="evt-desc">' + esc(desc);
-      if (isBypass) html += ' <span class="evt-bypass-tag">[BYPASS]</span>';
+      if (bypass) html += ' <span class="evt-bypass-tag">[BYPASS]</span>';
       html += '</span>';
       html += '</div>';
     });
