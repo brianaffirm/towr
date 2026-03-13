@@ -194,3 +194,122 @@ func TestMatchPolicy_FirstMatchWins(t *testing.T) {
 		t.Errorf("model = %q, want haiku (first match)", d.Model)
 	}
 }
+
+func TestRoute_ExplicitModel(t *testing.T) {
+	task := orchestrate.Task{ID: "t1", Prompt: "simple fix", Model: "opus"}
+	settings := orchestrate.Settings{}
+	d := Route(task, settings)
+	if d.Model != "opus" {
+		t.Errorf("model = %q, want opus", d.Model)
+	}
+	if d.Reason != "explicit" {
+		t.Errorf("reason = %q, want explicit", d.Reason)
+	}
+	if d.CanEscalate {
+		t.Error("explicit model should not be escalatable")
+	}
+}
+
+func TestRoute_DefaultOverridesHeuristic(t *testing.T) {
+	task := orchestrate.Task{ID: "t1", Prompt: "simple fix"}
+	settings := orchestrate.Settings{DefaultModel: "sonnet"}
+	d := Route(task, settings)
+	if d.Model != "sonnet" {
+		t.Errorf("model = %q, want sonnet (default)", d.Model)
+	}
+	if d.Reason != "default" {
+		t.Errorf("reason = %q, want default", d.Reason)
+	}
+}
+
+func TestRoute_NoDefault_FallsToHeuristic(t *testing.T) {
+	task := orchestrate.Task{ID: "t1", Prompt: "simple fix"}
+	settings := orchestrate.Settings{}
+	d := Route(task, settings)
+	if d.Model != "haiku" {
+		t.Errorf("model = %q, want haiku (heuristic)", d.Model)
+	}
+	if d.Reason != "heuristic:simple" {
+		t.Errorf("reason = %q, want heuristic:simple", d.Reason)
+	}
+}
+
+func TestRoute_NonClaudeAgent(t *testing.T) {
+	task := orchestrate.Task{ID: "t1", Prompt: "build the UI", Agent: "cursor"}
+	settings := orchestrate.Settings{}
+	d := Route(task, settings)
+	if d.CanEscalate {
+		t.Error("cursor agent should not be escalatable")
+	}
+	if d.Reason != "external-agent:cursor" {
+		t.Errorf("reason = %q, want external-agent:cursor", d.Reason)
+	}
+}
+
+func TestRoute_PolicyOverridesHeuristic(t *testing.T) {
+	task := orchestrate.Task{
+		ID:     "t1",
+		Prompt: "Update infrastructure/terraform/main.tf",
+	}
+	settings := orchestrate.Settings{
+		Routing: orchestrate.RoutingSettings{
+			Rules: []orchestrate.PolicyRule{
+				{Path: "infrastructure/**", Model: "opus"},
+			},
+		},
+	}
+	d := Route(task, settings)
+	if d.Model != "opus" {
+		t.Errorf("model = %q, want opus (policy)", d.Model)
+	}
+	if d.Reason != "policy:infrastructure/**" {
+		t.Errorf("reason = %q", d.Reason)
+	}
+}
+
+func TestEscalate_HaikuToSonnet(t *testing.T) {
+	d := Decision{Model: "haiku", Tier: 0, CanEscalate: true}
+	next, ok := Escalate(d)
+	if !ok {
+		t.Fatal("expected escalation to succeed")
+	}
+	if next.Model != "sonnet" {
+		t.Errorf("model = %q, want sonnet", next.Model)
+	}
+	if next.Tier != 1 {
+		t.Errorf("tier = %d, want 1", next.Tier)
+	}
+	if !next.CanEscalate {
+		t.Error("sonnet should still be escalatable")
+	}
+}
+
+func TestEscalate_SonnetToOpus(t *testing.T) {
+	d := Decision{Model: "sonnet", Tier: 1, CanEscalate: true}
+	next, ok := Escalate(d)
+	if !ok {
+		t.Fatal("expected escalation to succeed")
+	}
+	if next.Model != "opus" {
+		t.Errorf("model = %q, want opus", next.Model)
+	}
+	if next.CanEscalate {
+		t.Error("opus should not be escalatable")
+	}
+}
+
+func TestEscalate_OpusCantEscalate(t *testing.T) {
+	d := Decision{Model: "opus", Tier: 2, CanEscalate: false}
+	_, ok := Escalate(d)
+	if ok {
+		t.Fatal("opus should not escalate")
+	}
+}
+
+func TestEscalate_ExplicitCantEscalate(t *testing.T) {
+	d := Decision{Model: "sonnet", Tier: 1, CanEscalate: false, Reason: "explicit"}
+	_, ok := Escalate(d)
+	if ok {
+		t.Fatal("explicit model should not escalate")
+	}
+}
