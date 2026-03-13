@@ -1,160 +1,78 @@
 # towr
 
-Ship features while you sleep — without giving agents the keys to the kingdom.
-
-towr orchestrates parallel AI coding sessions with **granular permission control**: agents can edit files and run tests but can't `rm -rf` or force push. Every action is recorded in an immutable audit log. Every bypass requires a reason. Pre-land hooks block bad merges. Agents create PRs, not direct commits to main. Nothing lands without validation.
-
-The agents work. You review PRs in the morning.
-
-```yaml
-# sprint.yaml — point at your Jira tickets, go to bed
-name: "PROJ sprint 24"
-tasks:
-  - id: proj-1234
-    prompt: "Read Jira ticket PROJ-1234 and implement what it describes. Run tests."
-  - id: proj-1235
-    prompt: "Read Jira ticket PROJ-1235 and implement it."
-    agent: cursor                # use Cursor CLI
-  - id: proj-1236
-    prompt: "Read Jira ticket PROJ-1236. Depends on PROJ-1234."
-    agent: codex                 # use Codex CLI
-    depends_on: [proj-1234]
-settings:
-  auto_approve: true             # scoped allowlist, not blanket permissions
-  create_pr: true                # each task creates a PR automatically
-  web: true                      # live dashboard at :8090
-```
+Your agents write the code. towr lands it safely — and cheaply.
 
 ```
 $ towr run sprint.yaml
 
-Plan: PROJ sprint 24 (3 tasks)
+Plan: PROJ sprint 24 (6 tasks)
 
   Task                 Model    Reason                       Est. Cost
   ──────────────────────────────────────────────────────────────────────
-  proj-1234            sonnet   heuristic:standard           ~$0.48
-  proj-1235            haiku    heuristic:simple             ~$0.04
-  proj-1236            sonnet   heuristic:standard           ~$0.48
+  auth-middleware       opus     policy:infrastructure/**     ~$2.40
+  api-endpoints         sonnet   heuristic:standard           ~$0.48
+  unit-tests            haiku    heuristic:simple             ~$0.04
+  integration-tests     sonnet   heuristic:standard           ~$0.48
+  update-docs           haiku    heuristic:simple             ~$0.04
+  fix-flaky-test        haiku    heuristic:simple             ~$0.04
 
-  Estimated:  ~$1.00
-  All-opus:   ~$7.20
-  Savings:    ~86%
+  Estimated:  ~$3.48
+  All-opus:   ~$14.40
+  Savings:    ~76%
 
 Proceed? [Y/n]
 ```
 
-towr's smart router automatically picks the cheapest model likely to succeed — no `model:` annotation needed. If a task fails on haiku, it escalates to sonnet, then opus. You review PRs in the morning with a cost report showing what you saved.
+This run cost $3.48. Opus-for-everything would have cost $14.40. **towr saved you $10.92.**
 
-The YAML can reference anything the agent can read — Jira tickets, GitHub issues, tech specs, design docs, Slack threads. Write it by hand or have Claude generate it from your sprint board.
+towr is the governance layer between your AI agents and your main branch. It routes tasks to the cheapest model likely to succeed, validates every merge with hooks and tests, audits every action, and shows you what you saved. Nothing lands without validation. Nothing spends without visibility.
 
-## What towr does
+## Three pillars
 
-**Run** — `towr run plan.yaml` is the single command. It spawns isolated workspaces, routes each task to the cheapest viable model, dispatches to agents (Claude Code, Cursor, Codex), auto-approves permissions, creates PRs, monitors CI, responds to review comments, and shows a cost report when done.
+### 1. Smart router — the brain
 
-**Route smart** — The smart router analyzes each task and picks haiku, sonnet, or opus based on complexity heuristics and policy rules. If a task fails, it escalates to the next tier automatically. Explicit `model:` in YAML always wins. Budget caps (`--budget $10`) stop new tasks when spend exceeds the limit.
+towr analyzes each task and routes it to the cheapest model that can handle it. You don't annotate `model: sonnet` on every task — the system figures it out.
 
-**Track cost** — Pre-run estimates show what each task will cost. Post-run reports show actual spend vs. an all-opus baseline — "towr saved you $X." Token usage is parsed from Claude JSONL logs or estimated for other runtimes.
+**Routing precedence** (first match wins):
+1. Explicit `model:` on the task — always respected, no escalation
+2. Policy rules (`settings.routing.rules`) — path globs, keyword matching
+3. `settings.default_model`
+4. Heuristic analysis — word count, file references, architecture keywords
 
-**Land safely** — Validated merge pipeline with pre-land hooks, rebase-ff, protected branch enforcement, and full cleanup. Not a git alias — a pipeline that blocks bad merges.
+**Heuristics:**
+- Short prompt, single file, no complexity signals → **haiku** (~$0.04/task)
+- Standard implementation, ≤ 3 files → **sonnet** (~$0.48/task)
+- System design, 5+ files, architecture keywords → **opus** (~$2.40/task)
 
-**Stay safe** — Agents work in sandboxed git worktrees. They can't touch master, other workspaces, or files outside their branch. Multiple layers of protection:
+**Escalation on failure:** haiku → sonnet → opus. If a cheap model fails, towr retries with the next tier up. Failure is cheap information.
 
-| Layer | What it does |
-|---|---|
-| **Workspace isolation** | Each agent gets its own git worktree — changes are on a branch, never on main |
-| **Tool allowlist** | `.claude/settings.json` pre-approves safe tools (edit, build, test), blocks dangerous ones (`rm -rf`, `force push`, network calls) |
-| **Sandbox per agent** | Claude: scoped allowlist. Cursor: sandbox mode. Codex: `workspace-write` — can only modify files within the worktree |
-| **Pre-land hooks** | Test suite runs before any merge — if tests fail, the merge is blocked |
-| **Protected branches** | Agents create PRs, humans merge. No direct push to main. |
-| **Approval visibility** | Every permission dialog and auto-approval is logged in the activity feed — the web dashboard shows what was approved, when, and why |
-| **Bypass auditing** | Every `--force` or `--no-hooks` requires `--reason` and is flagged `[BYPASS]` in the audit log |
-| **Compliance export** | `towr audit --since 7d --csv` exports the full trail for SOC2/SOX review |
-
-This isn't "let agents do whatever they want." It's "let agents code freely in a sandbox, validate before merging, and audit everything."
-
-**Audit everything** — Every dispatch, approval, completion, and failure is recorded in an immutable event store. `towr audit --since 24h` exports the trail. `towr log <id>` shows per-workspace history. Bypass events are flagged `[BYPASS]`. The web dashboard shows the activity feed live — approvals in green, blocks in red, bypasses highlighted.
-
-**See everything** — Web dashboard (`towr web`) with live workspace cards grouped by attention level, terminal streaming via SSE, activity feed, and action buttons. TUI dashboard (`towr`) for the terminal. `towr ls` for quick status.
-
-## How towr fits with Claude Code Agent Teams
-
-towr and Agent Teams solve different problems at different layers. They're designed to stack, not compete.
-
-**Agent Teams** is a fast execution engine — one lead Claude spawns teammates that work in parallel within a single task. Great for: "implement this feature using 3 parallel workers." The teammates coordinate via SendMessage and task queues, share a session, and disappear when done.
-
-**towr** is the operations layer above — it manages the workspaces those agents work in, the branches they commit to, the PRs they create, the CI that validates their code, and the review feedback loop that follows. It persists across sessions, works with any runtime, and keeps an audit trail.
-
-They stack naturally:
-
-```
-You (or a master Claude session)
-  │
-  ├── towr dispatch auth "build auth" --agent claude-code
-  │     └── Claude Code + Agent Teams (3 workers)
-  │
-  ├── towr dispatch billing "implement billing" --agent cursor
-  │     └── Cursor CLI session
-  │
-  ├── towr dispatch docs "update API docs" --agent claude-code
-  │     └── Claude Code (solo)
-  │
-  └── towr dispatch scripts "run migrations" --agent generic
-        └── Plain bash
-
-  towr watch --react --auto-approve
-    → detects agent-specific permission dialogs (Enter for Claude, y for Cursor)
-    → creates PRs when tasks complete
-    → re-dispatches fixes when CI fails
-    → replies to @towr review comments
-```
-
-Or in a plan — mix agents per task:
+**Policy rules** let teams enforce routing decisions:
 
 ```yaml
-tasks:
-  - id: backend
-    prompt: "Read Jira PROJ-101 and implement the API"
-    agent: claude-code
-  - id: frontend
-    prompt: "Read Jira PROJ-102 and build the UI"
-    agent: cursor
-  - id: refactor
-    prompt: "Read Jira PROJ-103 and refactor the data layer"
-    agent: codex
-  - id: tests
-    prompt: "Write integration tests"
-    depends_on: [backend, frontend, refactor]
 settings:
-  default_agent: claude-code
+  routing:
+    rules:
+      - match: { path: "infrastructure/**" }
+        model: opus          # infra always gets opus
+      - match: { keywords: ["migration", "schema"] }
+        model: sonnet        # DB work gets at least sonnet
+  budget: 10.00              # hard cap — stop spawning after $10
 ```
 
-| | Agent Teams | towr |
-|---|---|---|
-| **What it does** | Fast parallel execution within one task | Lifecycle management across many tasks |
-| **Scope** | Single workspace, single session | Multi-workspace, multi-session, multi-repo |
-| **Persistence** | Ephemeral — gone when session ends | Event-sourced — survives crashes, reboots, sleep |
-| **Runtimes** | Claude Code only | Claude Code, Cursor CLI, Codex CLI, Aider — mix per task |
-| **Merge pipeline** | None — you merge manually | Validated: hooks → rebase → merge → cleanup |
-| **PR workflow** | None | Auto-create PRs, monitor CI, respond to reviews |
-| **Safety model** | `--dangerously-skip-permissions` (all or nothing) | Allowlist safe tools, block dangerous ones, audit bypasses |
-| **State after crash** | Lost | `towr doctor` → full recovery in 60s |
-| **Audit trail** | None | Immutable event log — every action, every bypass, exportable |
+### 2. Merge pipeline — the trust anchor
 
-**Use Agent Teams when** you want 3 workers to build one feature fast.
-**Use towr when** you want 5 features built overnight with PRs, CI, and review handling.
-**Use both** when you want 5 features built overnight, each by a team of 3 workers.
+`towr land` is not `git merge`. It's a validated pipeline:
 
-```
-$ towr spawn "refactor auth" --id auth
-$ towr spawn "fix billing" --id billing
-$ towr spawn "migrate tests" --id tests
+1. **Check status** — workspace health, branch state
+2. **Run pre-land hooks** — tests, lints, whatever you configure. Fail = merge blocked. Nothing lands dirty.
+3. **Rebase onto base** — fast-forward onto latest. Conflicts = blocked with details.
+4. **Merge** — rebase-ff, squash, ff-only, or merge commit
+5. **Post-land hooks** — notifications, deploys. Non-blocking.
+6. **Clean up** — remove worktree, delete branch, archive workspace
 
-$ towr ls
-ID        STATUS   HEALTH   ACTIVITY   DRIFT   DIFF       TREE    AGENT    AGE
-auth      READY    pass     4m         0       +142/-38   ~3      claude   12m
-billing   READY    fail     15m        +3      +67/-12    clean   claude   45m
-tests     READY    pass     2h         +12     +89/-204   ~1      —        2h
+If anything fails, the workspace stays intact. Nothing is silently lost.
 
+```bash
 $ towr land auth
 Landed workspace auth
   Strategy:     rebase-ff
@@ -162,22 +80,111 @@ Landed workspace auth
   Files:        8 changed
   Hooks:        pre_land passed (2.3s)
   Cleanup:      worktree removed, branch deleted
+
+$ towr land auth billing tests --chain   # land sequentially
+$ towr land auth --pr                    # push + create PR instead
+$ towr land auth --dry-run               # preview without executing
+$ towr land auth --force --reason "hotfix"  # bypass with audit trail
 ```
 
-## Why not just `git worktree`?
+Protected branches (`main`, `master`, `develop`, `release/*`) block local merge by default — agents create PRs, humans merge.
 
-| | git worktree | towr |
-|---|---|---|
-| Create isolated workspace | `git worktree add` | `towr spawn` |
-| See what's active | `git worktree list` (no diff stats) | `towr ls` (health, activity, drift, diff, tree, agent) |
-| Review changes | manual `git diff` per worktree | `towr diff`, `towr preview --diff` |
-| Merge safely | manual rebase + merge + cleanup | `towr land` (rebase, hooks, merge, cleanup) |
-| Block bad merges | nothing built-in | pre-land hooks, protected branches |
-| Track what happened | nothing | event-sourced audit log |
-| Clean up stale work | manual | `towr cleanup --stale`, `towr doctor` |
-| Dashboard | nothing | TUI with live refresh |
+### 3. Cost intelligence — the sale
 
-towr is the workflow around worktrees that git doesn't give you.
+Every run shows what you spent and what you saved:
+
+```
+Run complete: 6/6 tasks succeeded (18m30s)
+
+  Task                 Model    Tokens (in/out)    Cost      Saved
+  ──────────────────────────────────────────────────────────────────────
+  auth-middleware       opus     12,450 / 38,200    $3.80     —
+  api-endpoints         sonnet   8,200 / 21,100     $0.34     $2.98
+  unit-tests            haiku    4,100 / 12,800     $0.02     $3.78
+  integration-tests     sonnet   6,300 / 18,900     $0.30     $2.84
+  update-docs           haiku    3,200 / 8,400      $0.01     $3.79
+  fix-flaky-test        haiku    2,800 / 7,100      $0.01     $3.79
+
+  Total:      $4.48
+  All-opus:   $21.66
+  Saved:      $17.18 (79%)
+```
+
+Token usage is parsed from Claude's JSONL session logs when available, or estimated from prompt length for other runtimes. Budget caps (`--budget $10`) stop new tasks when spend exceeds the limit.
+
+## Safety model
+
+Agents work in sandboxed git worktrees. They can't touch main, other workspaces, or files outside their branch.
+
+| Layer | What it does |
+|---|---|
+| **Workspace isolation** | Each agent gets its own git worktree — changes are on a branch, never on main |
+| **Pre-land hooks** | Tests run before any merge. Fail = blocked. Nothing lands dirty. |
+| **Protected branches** | Agents create PRs, humans merge. No direct push to main. |
+| **Approval visibility** | Every auto-approval logged in the activity feed with what was approved and when |
+| **Bypass auditing** | `--force` requires `--reason`, flagged `[BYPASS]` in the audit log |
+| **Compliance export** | `towr audit --since 7d --csv` for SOC2/SOX review |
+
+Every dispatch, approval, completion, and failure is recorded in an immutable event store. `towr audit --since 24h` exports the trail. `towr log <id>` shows per-workspace history.
+
+## How it works
+
+```yaml
+# sprint.yaml
+name: "PROJ sprint 24"
+tasks:
+  - id: auth-middleware
+    prompt: "Implement JWT middleware in internal/auth/"
+  - id: api-endpoints
+    prompt: "Add CRUD endpoints for the user resource"
+  - id: unit-tests
+    prompt: "Write unit tests for internal/auth/"
+    depends_on: [auth-middleware]
+  - id: integration
+    prompt: "Run go test ./... and fix failures"
+    depends_on: [auth-middleware, api-endpoints, unit-tests]
+settings:
+  auto_approve: true
+  create_pr: true
+  budget: 10.00
+  routing:
+    rules:
+      - match: { path: "internal/auth/**" }
+        model: opus
+```
+
+```bash
+$ towr run sprint.yaml
+# routes each task to cheapest viable model
+# spawns isolated workspaces, dispatches to agents
+# auto-approves permission dialogs
+# merges dependency branches into downstream tasks
+# escalates model tier on failure (haiku → sonnet → opus)
+# creates PRs on completion
+# prints cost report at the end
+```
+
+One command. PRs in the morning, cost report attached.
+
+### Dependency handling
+
+When a task's dependencies complete, towr:
+- **Merges dependency branches** into the dependent workspace so the agent has upstream code
+- **Auto-commits** any uncommitted files when a task finishes
+- **Escalates model tier** on failure before exhausting retries
+- **Creates PRs** when tasks complete (if `create_pr: true`)
+
+### PR monitoring
+
+With `react_to_reviews: true`, `towr run` monitors PRs after tasks complete:
+
+```
+[19:35:00] ✗ PR #42 (towr/auth): CI failed — dispatching fix
+[19:38:00] ✓ auth: completed (CI fix pushed)
+[19:40:00] 💬 PR #42 (towr/auth): changes requested — dispatching fix
+[19:43:00] ✓ auth: completed (review fixes pushed)
+[19:45:00] ✓ PR #42 (towr/auth): approved + CI passing — ready to merge
+```
 
 ## Install
 
@@ -195,392 +202,52 @@ git clone https://github.com/brianaffirm/towr.git
 cd towr && go install ./cmd/towr/
 ```
 
-Requires Go 1.21+ and git. tmux is optional (enables terminal management and preview panes).
+Requires Go 1.21+ and git. tmux is optional (enables terminal management).
 
 ## Quick start
 
 ```bash
 cd ~/my-project
 
-# Create workspaces
-towr spawn "add authentication" --id auth
-towr spawn "fix payment flow" --id payments
-towr spawn                       # quick: auto-generates ws-0001
-towr spawn "fix billing" --env SUBPROJECT=services/billing  # monolith
+# Run a plan (the primary workflow)
+towr run plan.yaml                    # route, spawn, dispatch, approve, PR
+towr run plan.yaml --budget 5         # with spend cap
+towr run plan.yaml --quiet            # skip routing summary
 
-# Already working on a branch? Adopt it
-towr adopt                       # adopt current branch
-towr adopt feature/login         # adopt by branch name
-
-# Check status
-towr ls
-
-# Review changes
-towr diff auth
-towr preview --diff          # show diff in tmux split pane
-
-# Land when ready
-towr land auth               # rebase, validate hooks, merge, clean up
-towr land payments --pr      # push + print PR URL
-
-# Clean up
-towr cleanup payments
-towr doctor                  # find orphaned state
+# Or work with individual workspaces
+towr spawn "add auth" --id auth       # create isolated workspace
+towr adopt feature/login              # adopt existing branch
+towr ls                               # status dashboard
+towr diff auth                        # review changes
+towr land auth                        # validated merge
+towr land auth --pr                   # push + create PR
+towr land auth billing --chain        # land sequentially
+towr cleanup auth                     # remove workspace
+towr doctor                           # diagnose orphaned state
 ```
 
-## How `land` works
+## Web dashboard
 
-Landing is where towr earns its keep. `towr land` is not a convenience alias for `git merge` — it's a pipeline:
-
-1. **Validate** — check workspace status and branch state
-2. **Run pre-land hooks** — your tests, lints, whatever. If they fail, the workspace is marked BLOCKED and the merge is aborted. Nothing lands dirty.
-3. **Rebase onto base** — fast-forward onto the latest base branch. If there are conflicts, the workspace is marked BLOCKED with conflict details. You fix them, then re-land.
-4. **Merge** — using your configured strategy (rebase-ff, squash, ff-only, or merge commit)
-5. **Run post-land hooks** — notifications, deploys, whatever. Non-blocking.
-6. **Clean up** — remove worktree, delete branch, archive workspace
-
-If anything fails at any step, the workspace stays intact for inspection. Nothing is silently lost.
-
-### Landing options
-
-```bash
-towr land auth                # local merge (default: rebase-ff)
-towr land auth --squash       # squash all commits into one
-towr land auth --pr           # push + generate PR URL instead of local merge
-towr land auth --dry-run      # preview: check conflicts, show files changed
-towr land auth billing tests --chain  # land sequentially, rebase remaining onto updated base
-towr land auth --force --reason "hotfix"  # bypass status check with audit trail
-```
-
-Protected branches (`main`, `master`, `develop`, `release/*`) block local merge by default — use `--pr` or `--push` instead.
-
-## Working with AI agents
-
-towr works with Claude Code, Cursor, Aider, or anything that runs in a terminal. Each agent gets its own isolated worktree — no branch conflicts, no stash juggling, no "which agent is editing which file?"
-
-```bash
-# Give agents their own workspaces
-towr spawn "implement caching layer" --id cache
-towr spawn "update API docs" --id docs
-towr spawn "fix flaky tests" --id tests
-
-# One dashboard for everything
-towr ls
-# ID      STATUS    TASK          DIFF        TREE    AGE
-# cache   RUNNING   d-0001 ▶    +142/-38    ~3      12m
-# docs    IDLE      d-0001 ✓    +67/-12     clean   45m
-# tests   RUNNING   d-0001 ▶    +89/-204    ~1      2h
-
-# Check for file overlaps before merging (catch conflicts early)
-towr overlap
-
-# Review and land
-towr diff cache
-towr land cache              # rebase, validate hooks, merge, clean up
-towr land docs --pr          # push + print PR URL
-```
-
-Every action is recorded in an immutable audit log — which agent changed what, when, and why. `towr log <id>` shows the full history.
-
-## Dispatch orchestration
-
-Use one "master" Claude Code session to coordinate multiple child sessions across workspaces. The master dispatches tasks, monitors progress, approves permissions, and sequences dependent work.
-
-```bash
-# Spawn workspaces
-towr spawn "auth middleware" --id auth
-towr spawn "billing service" --id billing
-
-# Dispatch tasks (interactive mode — launches Claude REPL in each tmux session)
-towr dispatch auth "Implement JWT middleware in internal/auth/jwt.go"
-towr dispatch billing "Add Stripe webhook handler"
-
-# Check progress
-towr ls
-# ID        STATUS    TASK          DIFF
-# auth      RUNNING   d-0001 ▶    +0/-0
-# billing   RUNNING   d-0001 ▶    +0/-0
-
-# Wait for a workspace — surfaces permission dialogs
-towr wait auth
-# ⚠ auth d-0001: Do you want to create jwt.go?
-#   Run: towr send auth --approve
-
-# Approve and continue waiting
-towr send auth --approve
-towr wait auth
-# ✓ auth d-0001: Created jwt.go with middleware...
-
-# Send follow-up to a running session
-towr send auth "Now add unit tests for the JWT middleware" --wait
-
-# Headless mode for fully autonomous tasks (no permission prompts)
-towr dispatch billing "refactor handlers" --headless
-```
-
-### Autonomous monitoring
-
-Instead of manually waiting and approving each workspace, `towr watch` monitors all workspaces and reacts automatically:
-
-```bash
-# Dispatch tasks, then let watch handle the rest
-towr dispatch auth "implement JWT middleware"
-towr dispatch billing "add Stripe webhooks"
-towr dispatch tests "write integration tests"
-
-# Monitor all workspaces, auto-approve permission dialogs
-towr watch --auto-approve
-# [19:30:15] Watching 3 workspaces (poll: 10s, auto-approve: on)
-# [19:30:25] ▶ auth: working
-# [19:30:35] ⚠ auth: permission dialog — "Do you want to create jwt.go?"
-# [19:30:35] ✓ auth: auto-approved
-# [19:30:55] ✓ auth d-0001: completed — "Created jwt.go with middleware..."
-# [19:31:25] ✓ tests d-0001: completed
-# [19:31:25] All workspaces idle.
-```
-
-### Declarative task plans
-
-For multi-step projects with dependencies, define a YAML plan and let `towr run` execute it end-to-end:
-
-```yaml
-# plan.yaml
-name: "build todo app"
-tasks:
-  - id: models
-    prompt: "Create todo/store.go with Todo struct and CRUD methods"
-  - id: tests
-    prompt: "Create todo/store_test.go with table-driven tests"
-  - id: cli
-    prompt: "Create cobra CLI with add/list/complete/delete commands"
-    depends_on: [models]
-  - id: integration
-    prompt: "Run go test ./... and fix any failures"
-    depends_on: [models, tests, cli]
-settings:
-  auto_approve: true
-  max_retries: 2
-  create_pr: true
-  budget: 5.00        # stop spawning new tasks after $5 spend
-  routing:
-    rules:
-      - match: { path: "internal/**" }
-        model: sonnet  # policy: use sonnet for internal code
-```
-
-```bash
-towr run plan.yaml
-# Shows routing summary + cost estimate, then:
-# [19:30:00] Running "build todo app" — 4 tasks
-# [19:30:02] ▶ models: dispatched (sonnet, policy:internal/**)
-# [19:30:02] ▶ tests: dispatched (haiku, heuristic:simple)
-# [19:30:30] ✓ models: completed
-# [19:30:30] ▶ cli: dispatched (sonnet, heuristic:standard)
-# [19:31:00] ✓ tests: completed
-# [19:31:15] ✓ cli: completed
-# [19:31:15] ▶ integration: dispatched (sonnet, heuristic:standard)
-# [19:31:45] ✓ integration: completed
-# [19:31:45] All tasks done.
-#
-# Run complete: 4/4 tasks succeeded (1m45s)
-#   Total:    $1.44
-#   All-opus: $9.60
-#   Saved:    $8.16 (85%)
-```
-
-When a task's dependencies complete, towr automatically:
-- **Merges dependency branches** into the dependent workspace (so the child Claude has upstream code)
-- **Auto-commits** any uncommitted files when a task finishes
-- **Escalates model tier** on failure (haiku → sonnet → opus) before exhausting retries
-- **Creates PRs** when tasks complete (if `create_pr: true`)
-
-### Smart routing
-
-towr picks the cheapest model likely to succeed for each task, so you don't have to annotate every task with `model:`.
-
-**Routing precedence** (first match wins):
-1. Explicit `model:` on the task — always respected, no escalation
-2. Policy rules in `settings.routing.rules` — path globs and keyword matching
-3. `settings.default_model` — if set
-4. Heuristic analysis — word count, file references, architecture keywords
-
-**Heuristics:**
-- Short prompt, single file, no complexity signals → **haiku**
-- Standard implementation (≤ 3 files, no architecture keywords) → **sonnet**
-- System design, 5+ files, refactor/migrate/architect keywords → **opus**
-
-**Escalation on failure:** haiku → sonnet → opus (consumes retry count). Tasks with explicit `model:` don't escalate.
-
-**Policy rules** let you enforce model choices by file path or keyword:
-
-```yaml
-settings:
-  routing:
-    rules:
-      - match: { path: "infrastructure/**" }
-        model: opus
-      - match: { keywords: ["migration", "schema"] }
-        model: sonnet
-```
-
-### Cost intelligence
-
-`towr run` shows estimated cost before execution and actual cost after:
-
-```
-Run complete: 4/4 tasks succeeded (12m30s)
-
-  Task                 Model    Tokens (in/out)    Cost      Saved
-  ──────────────────────────────────────────────────────────────────────
-  auth-middleware       opus     12,450 / 38,200    $3.80     —
-  api-endpoints         sonnet   8,200 / 21,100     $0.34     $2.98
-  unit-tests            haiku    4,100 / 12,800     $0.02     $3.78
-  integration-tests     sonnet   6,300 / 18,900     $0.30     $2.84
-
-  Total:      $4.46
-  All-opus:   $13.40
-  Saved:      $8.94 (67%)
-```
-
-Token usage is parsed from Claude's JSONL session logs when available, or estimated from prompt length for other runtimes.
-
-### PR monitoring and auto-fix
-
-`towr watch --react` monitors open PRs on `towr/*` branches and auto-reacts to CI failures and review feedback:
-
-```bash
-# Run from anywhere — monitors all repos
-towr watch --react --all --auto-approve
-
-# [19:35:00] ✗ PR #42 (towr/auth): CI failed — dispatching fix
-# [19:38:00] ✓ auth d-0002: completed (CI fix pushed)
-# [19:40:00] 💬 PR #42 (towr/auth): changes requested — dispatching fix
-# [19:43:00] ✓ auth d-0003: completed (review fixes pushed)
-# [19:45:00] ✓ PR #42 (towr/auth): approved + CI passing — ready to merge
-```
-
-The overnight workflow:
-
-```bash
-towr run plan.yaml
-# → routes tasks to cheapest models
-# → spawns agents, approves permissions, creates PRs
-# → monitors PRs for CI failures and review comments
-# → morning: PRs ready for review + cost report
-```
-
-| Command | Description |
-|---------|-------------|
-| `towr run <plan.yaml>` | Execute plan: route, spawn, dispatch, approve, PR, watch — all in one |
-| `towr run <plan.yaml> --budget 10` | Same, but stop new tasks after $10 spend |
-| `towr run <plan.yaml> --quiet` | Skip pre-run routing summary |
-| `towr dispatch <id> "prompt"` | Send task to workspace (interactive default) |
-| `towr dispatch <id> "prompt" --headless` | Autonomous mode via `claude -p` |
-| `towr watch --react --all` | Monitor all workspaces + PRs, auto-react to feedback |
-| `towr watch --auto-approve` | Auto-approve permission dialogs |
-| `towr send <id> "message"` | Send follow-up to interactive session |
-| `towr send <id> --approve` | Approve a permission dialog |
-| `towr wait <id>` | Wait for current task (`--any`/`--all` for multi-workspace) |
-| `towr promote <id>` | Attach to tmux session for hands-on debugging |
-
-## TUI Dashboard
-
-Run `towr` with no arguments for an interactive dashboard:
-
-<!-- TODO: add screenshot (see inbox 013) -->
-
-- `j/k` navigate, `enter` detail view, `s` switch tmux session
-- `d` full diff, `l` land, `c` cleanup with safety checks
-- `a` toggle between current repo and all workspaces
-- Live refresh every 2 seconds
-
-## Web Dashboard
-
-`towr web` starts a local HTTP server with a real-time browser dashboard:
+`towr web` starts a browser dashboard with live workspace status, safety shields, and an activity feed.
 
 ```bash
 towr web                    # http://127.0.0.1:8090
-towr web --addr :9000       # custom port
 ```
-
-**Command Center overview** — score cards, urgency-sorted workspace list, safety shields:
 
 ![Dashboard Overview](docs/images/dashboard-overview.png)
 
-**Click to expand** — structured step view showing what the agent is doing, with Send and Raw terminal controls:
-
-![Expanded Workspace](docs/images/dashboard-expanded.png)
-
-**Activity log** — grouped approvals, color-coded events, workspace badges:
-
-![Activity Log](docs/images/dashboard-activity.png)
-
 Features:
 - **Score cards** — total, working, blocked, completed, bypasses, approvals at a glance
-- **Urgency sort** — blocked first (red glow), working second, completed last (fading opacity)
-- **Safety shields** — 🛡️ sandboxed (green), 🛡️ N approved (yellow), 🛡️ bypass (red) on every row
-- **Structured steps** — click a workspace to see: ✓ Read files → ✓ Created jwt.go → ▶ Running tests
-- **Activity feed** — grouped approvals ("4 auto-approvals"), clean descriptions, bypass highlighting
+- **Safety shields** — green (sandboxed), yellow (N approved), red (bypass) per workspace
+- **Activity feed** — grouped approvals, color-coded events, bypass highlighting
 - **Export Audit** — one-click CSV download
-- **Auto-refresh** every 4s, dark theme, responsive, zero external dependencies
+- **Auto-refresh** every 4s, dark theme, zero external dependencies
 
-API endpoints:
-- `GET /api/workspaces` — JSON workspace list for scripting
-- `GET /api/events` — recent audit events (supports `?type=approval` or `?type=bypass` filtering)
-- `GET /api/workspace/<id>/safety` — per-workspace safety summary (level, approval count, bypass count)
-- `GET /api/audit/export?format=csv&since=168h` — CSV audit trail export
-- `GET /api/stream/<id>` — SSE live terminal output
-- `POST /api/workspaces/<id>/approve` — approve permission dialog
-- `POST /api/workspaces/<id>/send` — send message to workspace
-
-All static assets embedded in the Go binary via `embed.FS` — single `go install`, nothing else needed.
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `towr run <plan.yaml>` | Execute plan with smart routing, cost tracking, PRs, and monitoring |
-| `towr spawn [task] [--env K=V]` | Create workspace (branch + worktree). No args = auto-ID |
-| `towr adopt [path-or-branch]` | Adopt existing worktree/branch as towr workspace |
-| `towr ls` | List workspaces with diff stats and tree status |
-| `towr land <id>` | Validate, rebase, merge, clean up |
-| `towr land <id> --pr` | Push + print PR URL |
-| `towr land <id> --squash` | Squash commits before merge |
-| `towr land <id> --dry-run` | Preview merge without executing |
-| `towr land <id1> <id2> --chain` | Land multiple workspaces sequentially |
-| `towr diff <id>` | Show changes against base |
-| `towr log <id>` | Show workspace event history |
-| `towr open <id>` | Switch to workspace tmux session |
-| `towr preview --diff` | Show diff in tmux split pane |
-| `towr cleanup <id>` | Remove workspace |
-| `towr cleanup --stale` | Remove workspaces older than threshold |
-| `towr cleanup --merged` | Remove workspaces whose branches are merged |
-| `towr doctor` | Diagnose orphaned worktrees, missing branches |
-| `towr queue` | Show pending approval items |
-| `towr approve/deny/respond <id>` | Resolve approval items |
-| `towr overlap` | Detect file overlaps between workspaces (merge conflict risk) |
-| `towr web` | Start local HTTP dashboard (JSON API + SSE streaming) |
-| `towr shell-hook` | Print shell integration for prompt nudges |
-
-All commands support `--json` for scripting.
-
-## Shell integration
-
-Add to your `~/.zshrc` or `~/.bashrc`:
-
-```bash
-eval "$(towr shell-hook)"
-```
-
-When you're on an untracked branch with uncommitted changes, towr nudges:
-
-```
-towr: untracked work on feat/auth — 'towr adopt' to track
-```
+API: `/api/workspaces`, `/api/events`, `/api/audit/export?format=csv&since=168h`, `/api/stream/<id>` (SSE).
 
 ## Configuration
 
-Global config at `~/.towr/global-config.toml`, per-repo config at `.towr.toml` in your repo root (repo config overlays global):
+Global: `~/.towr/global-config.toml`. Per-repo: `.towr.toml` in repo root.
 
 ```toml
 [defaults]
@@ -595,38 +262,57 @@ pre_land = "cd ${WORKTREE_PATH} && npm test"
 protected_branches = ["main", "master", "develop", "release/*"]
 
 [workspace]
-copy_paths = [".env.local"]         # copied into each worktree
-link_paths = ["node_modules"]       # symlinked to save disk/time
+copy_paths = [".env.local"]
+link_paths = ["node_modules"]
 
 [cleanup]
 stale_threshold = "7d"
 ```
 
-Hook variables: `${WORKSPACE_ID}`, `${WORKTREE_PATH}`, `${BRANCH}`, `${BASE_BRANCH}`, `${REPO_ROOT}`.
-
 Pre-land hooks block the merge if they fail. Post-land hooks are non-blocking.
 
-## How it works
+## Commands
 
-State lives in `~/.towr/`, not in your repo. No files to gitignore, no risk of committing logs.
+| Command | Description |
+|---------|-------------|
+| `towr run <plan.yaml>` | Route, spawn, dispatch, approve, PR, monitor — all in one |
+| `towr land <id>` | Validated merge: hooks → rebase → merge → cleanup |
+| `towr land <id> --pr` | Push + create PR |
+| `towr land <ids...> --chain` | Land multiple workspaces sequentially |
+| `towr spawn [task]` | Create workspace (branch + worktree) |
+| `towr adopt [branch]` | Adopt existing branch as towr workspace |
+| `towr ls` | List workspaces with status, diff stats, agent info |
+| `towr diff <id>` | Show changes against base |
+| `towr log <id>` | Workspace event history |
+| `towr audit --since 24h` | Export audit trail |
+| `towr overlap` | Detect file overlaps between workspaces |
+| `towr doctor` | Diagnose orphaned worktrees, missing branches |
+| `towr cleanup <id>` | Remove workspace |
+| `towr web` | Browser dashboard with live status and audit feed |
+
+All commands support `--json` for scripting.
+
+## Architecture
+
+State lives in `~/.towr/`, not in your repo.
 
 ```
 ~/.towr/
   repos/<hash>/
     state.db        SQLite — workspace records + event-sourced state
-    audit.jsonl     Append-only audit trail (every spawn, land, hook, conflict)
+    audit.jsonl     Append-only audit trail
     config.toml     Per-repo config
   worktrees/<repo>/
     auth/           Git worktree for "auth" workspace
     billing/        Git worktree for "billing" workspace
 ```
 
-Every action — spawn, land, hook execution, conflict, cleanup — is recorded as an immutable event. `towr log <id>` shows the full history. `audit.jsonl` is machine-readable for compliance or debugging.
+Single Go binary. No daemon. No external dependencies beyond git.
 
 ## Requirements
 
-- **git** 2.15+ (for `git worktree` support)
-- **tmux** (optional) — enables `towr open`, `towr preview`, and TUI session switching. Without tmux, towr falls back gracefully: `open` prints the worktree path, `preview` is unavailable.
+- **git** 2.15+
+- **tmux** (optional) — enables `towr open`, `towr preview`, TUI session switching
 
 ## License
 
