@@ -20,7 +20,7 @@ type Task struct {
 	Prompt    string   `yaml:"prompt"`
 	DependsOn []string `yaml:"depends_on"`
 	Agent     string   `yaml:"agent,omitempty"` // agent runtime override; defaults to settings.default_agent or "claude-code"
-	Model     string   `yaml:"model,omitempty"` // model shorthand: opus, sonnet, cursor, codex — maps to agent + model flag
+	Model     string   `yaml:"model,omitempty"` // model override: opus, sonnet, haiku, codex-mini, gpt-5.3-codex, gpt-5.4, cursor-auto, cursor-sonnet
 }
 
 // PolicyRule defines a routing policy that overrides heuristics.
