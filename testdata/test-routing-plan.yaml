@@ -1,0 +1,32 @@
+name: "routing test"
+tasks:
+  - id: simple-fix
+    prompt: "Fix the typo in README.md"
+
+  - id: api-endpoints
+    prompt: "Implement the login handler in cmd/auth/handler.go and update cmd/auth/routes.go and internal/middleware/jwt.go"
+
+  - id: infra-change
+    prompt: "Update infrastructure/terraform/main.tf with the new VPC configuration"
+
+  - id: arch-redesign
+    prompt: "Refactor the entire authentication system across cmd/auth/handler.go, cmd/auth/routes.go, internal/middleware/jwt.go, internal/middleware/cors.go, internal/middleware/rate.go, and internal/config/auth.go"
+
+  - id: explicit-opus
+    prompt: "Simple task but forced to opus"
+    model: opus
+
+  - id: cursor-task
+    prompt: "Build the frontend UI"
+    agent: cursor
+
+settings:
+  auto_approve: true
+  routing:
+    rules:
+      - path: "infrastructure/**"
+        model: opus
+        require_approval: true
+      - keyword: "documentation"
+        model: haiku
+  budget: 25.00
