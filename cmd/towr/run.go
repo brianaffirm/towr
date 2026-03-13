@@ -266,7 +266,7 @@ func runSpawnAndDispatch(app *appContext, plan *orchestrate.Plan, task *orchestr
 	if agentType == "" {
 		agentType = plan.Settings.DefaultAgent
 	}
-	ag := agent.GetWithModel(st.decision.Model, agentType)
+	ag := agent.GetWithOpts(st.decision.Model, agentType, plan.Settings.FullAuto)
 
 	// Spawn workspace.
 	baseBranch := "main"
@@ -534,7 +534,7 @@ func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Tas
 			if retryAgent == "" {
 				retryAgent = plan.Settings.DefaultAgent
 			}
-			ag := agent.GetWithModel(st.decision.Model, retryAgent)
+			ag := agent.GetWithOpts(st.decision.Model, retryAgent, plan.Settings.FullAuto)
 			prompt := task.Prompt + "\n\nWhen you are done:\n1. git add and commit all your changes with a descriptive message\n2. Do not leave uncommitted files."
 
 			go func() {
@@ -624,7 +624,7 @@ func runAutoApprove(app *appContext, plan *orchestrate.Plan, states map[string]*
 		if agentType == "" {
 			agentType = plan.Settings.DefaultAgent
 		}
-		ag := agent.GetWithModel(model, agentType)
+		ag := agent.GetWithOpts(model, agentType, plan.Settings.FullAuto)
 		lastActivity := app.term.PaneLastActivity(task.ID)
 		state := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 5*time.Second)
 

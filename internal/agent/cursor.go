@@ -5,6 +5,7 @@ import "fmt"
 // CursorAgent implements the Agent interface for the Cursor CLI (cursor-agent).
 type CursorAgent struct {
 	ModelFlag string // e.g. "cursor-auto", "cursor-sonnet"
+	FullAuto  bool   // skip all permission prompts
 }
 
 // Name returns "cursor" or "cursor:<model>" if ModelFlag is set.
@@ -30,10 +31,14 @@ func cursorCLIFlag(model string) string {
 
 // LaunchCommand returns the shell command to start the Cursor agent.
 func (c *CursorAgent) LaunchCommand() string {
+	cmd := "cursor-agent"
 	if c.ModelFlag != "" {
-		return "cursor-agent --model " + cursorCLIFlag(c.ModelFlag)
+		cmd += " --model " + cursorCLIFlag(c.ModelFlag)
 	}
-	return "cursor-agent"
+	if c.FullAuto {
+		cmd += " --yolo"
+	}
+	return cmd
 }
 
 // LaunchEnv returns environment variables for launching Cursor.

@@ -18,21 +18,27 @@ func Get(name string) Agent {
 	return Default()
 }
 
-// GetWithModel returns an agent with an optional model override.
-// Constructs a new instance (not the registered singleton) so ModelFlag
-// is set without shared-state mutation.
-func GetWithModel(model, agentName string) Agent {
+// GetWithOpts returns an agent with optional model and full-auto overrides.
+// Constructs a new instance (not the registered singleton) so fields
+// are set without shared-state mutation.
+func GetWithOpts(model, agentName string, fullAuto bool) Agent {
 	switch agentName {
 	case "codex":
-		return &CodexAgent{ModelFlag: model}
+		return &CodexAgent{ModelFlag: model, FullAuto: fullAuto}
 	case "cursor":
-		return &CursorAgent{ModelFlag: model}
+		return &CursorAgent{ModelFlag: model, FullAuto: fullAuto}
 	default: // claude-code or empty
-		if model != "" {
-			return &ClaudeCode{ModelFlag: model}
+		if model != "" || fullAuto {
+			return &ClaudeCode{ModelFlag: model, FullAuto: fullAuto}
 		}
 		return Default()
 	}
+}
+
+// GetWithModel returns an agent with an optional model override.
+// Convenience wrapper around GetWithOpts with fullAuto=false.
+func GetWithModel(model, agentName string) Agent {
+	return GetWithOpts(model, agentName, false)
 }
 
 // Register adds an agent to the registry.

@@ -7,6 +7,7 @@ import (
 // ClaudeCode implements the Agent interface for Claude Code (Anthropic's CLI).
 type ClaudeCode struct {
 	ModelFlag string // optional: "sonnet", "opus", "haiku", or full model ID
+	FullAuto  bool   // skip all permission prompts
 }
 
 // Name returns "claude-code" or "claude-code:model" if a model is set.
@@ -20,10 +21,14 @@ func (c *ClaudeCode) Name() string {
 // LaunchCommand returns the shell command to launch Claude Code's interactive REPL.
 // Includes --model flag if set.
 func (c *ClaudeCode) LaunchCommand() string {
+	cmd := "unset CLAUDECODE && claude"
 	if c.ModelFlag != "" {
-		return "unset CLAUDECODE && claude --model " + c.ModelFlag
+		cmd += " --model " + c.ModelFlag
 	}
-	return "unset CLAUDECODE && claude"
+	if c.FullAuto {
+		cmd += " --dangerously-skip-permissions"
+	}
+	return cmd
 }
 
 // LaunchEnv returns env vars for launching Claude Code.

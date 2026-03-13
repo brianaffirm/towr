@@ -52,6 +52,7 @@ type Settings struct {
 	DefaultModel   string          `yaml:"default_model,omitempty"` // default model: opus, sonnet, etc.
 	Routing        RoutingSettings `yaml:"routing"`
 	Budget         float64         `yaml:"budget"`
+	FullAuto       bool            `yaml:"full_auto"`       // skip all permission prompts on all agents
 }
 
 // LoadPlan reads and parses a YAML plan file from the given path.
