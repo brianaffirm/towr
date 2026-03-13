@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/brianaffirm/towr/internal/agent"
+	"github.com/brianaffirm/towr/internal/cost"
 	"github.com/brianaffirm/towr/internal/dispatch"
 	"github.com/brianaffirm/towr/internal/orchestrate"
+	"github.com/brianaffirm/towr/internal/router"
 	"github.com/brianaffirm/towr/internal/store"
 	"github.com/brianaffirm/towr/internal/workspace"
 	"github.com/google/uuid"
@@ -19,6 +21,9 @@ import (
 )
 
 func newRunCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Command {
+	var budgetOverride float64
+	var quiet bool
+
 	cmd := &cobra.Command{
 		Use:   "run <plan.yaml>",
 		Short: "Execute a plan: spawn, dispatch, approve, PR, watch — all in one",
@@ -47,9 +52,17 @@ PRs for CI failures and review comments.`,
 				plan.Settings.CreatePR = true
 			}
 
-			return runPlan(app, plan, jsonFlag)
+			if budgetOverride > 0 {
+				plan.Settings.Budget = budgetOverride
+			}
+
+			return runPlan(app, plan, jsonFlag, quiet)
 		},
 	}
+
+	cmd.Flags().Float64Var(&budgetOverride, "budget", 0, "Maximum USD budget for this run (0 = no limit)")
+	cmd.Flags().BoolVar(&quiet, "quiet", false, "Skip pre-run routing summary display")
+
 	return cmd
 }
 
@@ -58,11 +71,17 @@ type runTaskState struct {
 	retries   int
 	dispID    string
 	startedAt time.Time // when dispatch started — grace period before checking
+	decision  router.Decision
 }
 
-func runPlan(app *appContext, plan *orchestrate.Plan, jsonFlag *bool) error {
+func runPlan(app *appContext, plan *orchestrate.Plan, jsonFlag *bool, quiet bool) error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	startTime := time.Now()
+	costData := make(map[string]*cost.PostRunItem)
+	var accumulatedCost float64
+	budgetExceeded := false
 
 	// Defaults.
 	pollInterval := 10 * time.Second
@@ -98,6 +117,38 @@ func runPlan(app *appContext, plan *orchestrate.Plan, jsonFlag *bool) error {
 		states[t.ID] = &runTaskState{status: "pending"}
 	}
 
+	// Route all tasks and display pre-run summary.
+	var preRunItems []cost.PreRunItem
+	for i := range plan.Tasks {
+		task := &plan.Tasks[i]
+		d := router.Route(*task, plan.Settings)
+		estUsage := cost.DefaultEstimate()
+		estCost := cost.Calculate(d.Model, estUsage)
+		preRunItems = append(preRunItems, cost.PreRunItem{
+			TaskID:   task.ID,
+			Decision: d,
+			EstCost:  estCost,
+		})
+	}
+
+	if !quiet {
+		name := plan.Name
+		if name == "" {
+			name = "plan"
+		}
+		fmt.Print(cost.FormatPreRun(name, preRunItems))
+
+		if !plan.Settings.AutoApprove {
+			fmt.Print("\nProceed? [Y/n] ")
+			var answer string
+			fmt.Scanln(&answer)
+			if answer != "" && strings.ToLower(answer) != "y" {
+				fmt.Println("Aborted.")
+				return nil
+			}
+		}
+	}
+
 	name := plan.Name
 	if name == "" {
 		name = "plan"
@@ -131,6 +182,20 @@ func runPlan(app *appContext, plan *orchestrate.Plan, jsonFlag *bool) error {
 				if !ready {
 					continue
 				}
+				// Budget check before dispatching.
+				if plan.Settings.Budget > 0 && !budgetExceeded {
+					estNext := cost.Calculate("sonnet", cost.DefaultEstimate())
+					if accumulatedCost+estNext > plan.Settings.Budget {
+						budgetExceeded = true
+						fmt.Printf("[%s] ⚠ Budget cap ($%.2f) reached — accumulated $%.2f, skipping new tasks\n",
+							fmtTime(), plan.Settings.Budget, accumulatedCost)
+					}
+				}
+				if budgetExceeded {
+					st.status = "failed"
+					fmt.Printf("[%s] ○ %s: skipped (budget exceeded)\n", fmtTime(), task.ID)
+					continue
+				}
 				// Spawn + dispatch.
 				runSpawnAndDispatch(app, plan, &task, st)
 			}
@@ -141,11 +206,11 @@ func runPlan(app *appContext, plan *orchestrate.Plan, jsonFlag *bool) error {
 				if st.status != "running" {
 					continue
 				}
-				runCheckTask(app, plan, &task, st, maxRetries)
+				runCheckTask(app, plan, &task, st, maxRetries, costData, &accumulatedCost)
 			}
 
 			// 3. Auto-approve blocked workspaces.
-			runAutoApprove(app, plan)
+			runAutoApprove(app, plan, states)
 
 			// 4. Check if all done.
 			allDone := true
@@ -157,7 +222,19 @@ func runPlan(app *appContext, plan *orchestrate.Plan, jsonFlag *bool) error {
 			}
 			if allDone {
 				fmt.Printf("[%s] All tasks done.\n", fmtTime())
-				printRunSummary(states)
+
+				elapsed := time.Since(startTime)
+				var items []cost.PostRunItem
+				for _, task := range plan.Tasks {
+					if cd, ok := costData[task.ID]; ok {
+						items = append(items, *cd)
+					}
+				}
+				if len(items) > 0 {
+					fmt.Print(cost.FormatPostRun(items, len(plan.Tasks), elapsed))
+				} else {
+					printRunSummary(states)
+				}
 
 				if plan.Settings.ReactToReviews {
 					fmt.Printf("[%s] Watching PRs for reviews and CI... (Ctrl-C to stop)\n", fmtTime())
@@ -173,16 +250,13 @@ func runPlan(app *appContext, plan *orchestrate.Plan, jsonFlag *bool) error {
 func runSpawnAndDispatch(app *appContext, plan *orchestrate.Plan, task *orchestrate.Task, st *runTaskState) {
 	st.status = "spawning"
 
-	// Resolve model → agent.
-	model := task.Model
-	if model == "" {
-		model = plan.Settings.DefaultModel
-	}
+	// Route task to model.
+	st.decision = router.Route(*task, plan.Settings)
 	agentType := task.Agent
 	if agentType == "" {
 		agentType = plan.Settings.DefaultAgent
 	}
-	ag := agent.GetWithModel(model, agentType)
+	ag := agent.GetWithModel(st.decision.Model, agentType)
 
 	// Spawn workspace.
 	baseBranch := "main"
@@ -311,7 +385,7 @@ func runSpawnAndDispatch(app *appContext, plan *orchestrate.Plan, task *orchestr
 	st.startedAt = time.Now()
 }
 
-func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Task, st *runTaskState, maxRetries int) {
+func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Task, st *runTaskState, maxRetries int, costData map[string]*cost.PostRunItem, accCost *float64) {
 	// Grace period: don't check until agent has had time to start.
 	if time.Since(st.startedAt) < 45*time.Second {
 		return
@@ -374,7 +448,7 @@ func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Tas
 				ghCmd := exec.Command("gh", "pr", "create",
 					"--base", sw.BaseBranch, "--head", branch,
 					"--title", fmt.Sprintf("feat(%s): from towr run", task.ID),
-					"--body", fmt.Sprintf("Auto-generated by `towr run`.\n\nTask: %s\nModel: %s", task.ID, task.Model))
+					"--body", fmt.Sprintf("Auto-generated by `towr run`.\n\nTask: %s\nModel: %s", task.ID, st.decision.Model))
 				ghCmd.Dir = app.repoRoot
 				if ghOut, ghErr := ghCmd.CombinedOutput(); ghErr == nil {
 					prURL := strings.TrimSpace(string(ghOut))
@@ -392,6 +466,40 @@ func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Tas
 			Data: map[string]interface{}{"dispatch_id": st.dispID, "summary": summary},
 		})
 
+		// Emit cost event.
+		var usage cost.TokenUsage
+		if sw.WorktreePath != "" && (sw.AgentRuntime == "" || sw.AgentRuntime == "claude-code") {
+			usage, _ = cost.ParseClaudeTokens(sw.WorktreePath)
+		} else {
+			usage = cost.EstimateTokens(task.Prompt)
+		}
+		actualCost := cost.Calculate(st.decision.Model, usage)
+		opusCost := cost.Calculate("opus", usage)
+		_ = app.store.EmitEvent(store.Event{
+			ID: uuid.New().String(), Kind: store.EventTaskCost,
+			WorkspaceID: task.ID, RepoRoot: app.repoRoot, Timestamp: time.Now().UTC(),
+			Data: map[string]interface{}{
+				"dispatch_id":     st.dispID,
+				"task_id":         task.ID,
+				"model":           st.decision.Model,
+				"route_reason":    st.decision.Reason,
+				"input_tokens":    usage.InputTokens,
+				"output_tokens":   usage.OutputTokens,
+				"token_source":    usage.Source,
+				"estimated_cost":  actualCost,
+				"opus_baseline":   opusCost,
+				"pricing_version": cost.Version,
+			},
+		})
+		*accCost += actualCost
+		costData[task.ID] = &cost.PostRunItem{
+			TaskID:     task.ID,
+			Model:      st.decision.Model,
+			Usage:      usage,
+			ActualCost: actualCost,
+			OpusCost:   opusCost,
+		}
+
 	case dispatch.PaneWorking:
 		// Still working, nothing to do.
 
@@ -399,16 +507,78 @@ func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Tas
 		// Auto-approve handled separately in runAutoApprove.
 
 	case dispatch.PaneEmpty:
-		// Agent exited. Re-dispatch (workspace already exists) or fail.
+		// Agent exited. Re-dispatch with escalation or fail.
 		st.retries++
 		if st.retries <= maxRetries {
-			fmt.Printf("[%s] ⚠ %s: agent exited, re-dispatching (%d/%d)\n", fmtTime(), task.ID, st.retries, maxRetries)
-			towrBin, _ := os.Executable()
+			if escalated, ok := router.Escalate(st.decision); ok {
+				st.decision = escalated
+				fmt.Printf("[%s] ⚠ %s: agent exited, escalating to %s (%d/%d)\n",
+					fmtTime(), task.ID, escalated.Model, st.retries, maxRetries)
+			} else {
+				fmt.Printf("[%s] ⚠ %s: agent exited, re-dispatching %s (%d/%d)\n",
+					fmtTime(), task.ID, st.decision.Model, st.retries, maxRetries)
+			}
+
+			// Inline re-dispatch with (potentially escalated) model.
+			retryAgent := task.Agent
+			if retryAgent == "" {
+				retryAgent = plan.Settings.DefaultAgent
+			}
+			ag := agent.GetWithModel(st.decision.Model, retryAgent)
 			prompt := task.Prompt + "\n\nWhen you are done:\n1. git add and commit all your changes with a descriptive message\n2. Do not leave uncommitted files."
+
 			go func() {
-				cmd := exec.Command(towrBin, "dispatch", task.ID, prompt)
-				cmd.Dir = app.repoRoot
-				_ = cmd.Run()
+				id := task.ID
+				_ = app.term.PasteBuffer(id, ag.LaunchCommand())
+				time.Sleep(500 * time.Millisecond)
+				_ = app.term.SendKeys(id, "Enter")
+
+				for i := 0; i < 40; i++ {
+					time.Sleep(1500 * time.Millisecond)
+					captured, _ := app.term.CapturePane(id, 50)
+					if captured == "" {
+						continue
+					}
+					for _, p := range ag.StartupDialogs() {
+						if strings.Contains(captured, p) {
+							_ = app.term.SendKeys(id, ag.StartupKey())
+							time.Sleep(1 * time.Second)
+							break
+						}
+					}
+					if strings.Contains(captured, ag.IdlePattern()) {
+						break
+					}
+				}
+
+				time.Sleep(500 * time.Millisecond)
+				_ = app.term.PasteBuffer(id, prompt)
+				time.Sleep(500 * time.Millisecond)
+				_ = app.term.SendKeys(id, "Enter")
+
+				for {
+					time.Sleep(3 * time.Second)
+					if st.status == "completed" || st.status == "failed" {
+						return
+					}
+					captured, err := app.term.CapturePane(id, 200)
+					if err != nil {
+						continue
+					}
+					for _, pattern := range ag.DialogIndicators() {
+						if strings.Contains(captured, pattern) {
+							approveKey := "Enter"
+							if strings.Contains(captured, "Run this command?") || strings.Contains(captured, "Run (once)") {
+								approveKey = "y"
+							} else if strings.Contains(captured, "Trust this workspace") {
+								approveKey = "a"
+							}
+							_ = app.term.SendKeys(id, approveKey)
+							fmt.Printf("[%s] ✓ %s: auto-approved\n", fmtTime(), id)
+							break
+						}
+					}
+				}
 			}()
 			st.startedAt = time.Now()
 		} else {
@@ -418,13 +588,18 @@ func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Tas
 	}
 }
 
-func runAutoApprove(app *appContext, plan *orchestrate.Plan) {
+func runAutoApprove(app *appContext, plan *orchestrate.Plan, states map[string]*runTaskState) {
 	if !plan.Settings.AutoApprove {
 		return
 	}
 
 	// Check ALL plan tasks for blocked dialogs — don't filter by store status.
 	for _, task := range plan.Tasks {
+		// Skip tasks where routing decision requires manual approval.
+		if st, ok := states[task.ID]; ok && st.decision.RequireApproval {
+			continue
+		}
+
 		captured, err := app.term.CapturePane(task.ID, 200)
 		if err != nil {
 			continue

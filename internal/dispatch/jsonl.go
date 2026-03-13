@@ -25,6 +25,12 @@ type JSONLEntry struct {
 // Overridable in tests.
 var claudeProjectsDir = ""
 
+// SetProjectsDirOverride allows test packages to override the Claude projects directory.
+func SetProjectsDirOverride(dir string) { claudeProjectsDir = dir }
+
+// GetProjectsDirOverride returns the current override (empty = use default).
+func GetProjectsDirOverride() string { return claudeProjectsDir }
+
 func getClaudeProjectsDir() string {
 	if claudeProjectsDir != "" {
 		return claudeProjectsDir

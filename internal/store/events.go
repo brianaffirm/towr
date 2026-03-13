@@ -35,6 +35,7 @@ const (
 	EventTaskFailed     = "task.failed"
 	EventTaskBlocked    = "task.blocked"
 	EventTaskPromoted   = "task.promoted"
+	EventTaskCost       = "task.cost"
 )
 
 // Event represents an immutable state-change record.

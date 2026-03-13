@@ -173,3 +173,47 @@ func TestValidate_DiamondGraph(t *testing.T) {
 		t.Fatalf("diamond graph should be valid: %v", err)
 	}
 }
+
+func TestLoadPlan_RoutingSettings(t *testing.T) {
+	yamlContent := `
+name: "routed plan"
+tasks:
+  - id: first
+    prompt: "Do something"
+settings:
+  auto_approve: true
+  routing:
+    rules:
+      - path: "infrastructure/**"
+        model: opus
+        require_approval: true
+      - keyword: "test"
+        model: haiku
+  budget: 15.50
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "plan.yaml")
+	if err := os.WriteFile(path, []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := LoadPlan(path)
+	if err != nil {
+		t.Fatalf("LoadPlan: %v", err)
+	}
+
+	if len(plan.Settings.Routing.Rules) != 2 {
+		t.Fatalf("routing rules = %d, want 2", len(plan.Settings.Routing.Rules))
+	}
+	r0 := plan.Settings.Routing.Rules[0]
+	if r0.Path != "infrastructure/**" || r0.Model != "opus" || !r0.RequireApproval {
+		t.Errorf("rule[0] = %+v", r0)
+	}
+	r1 := plan.Settings.Routing.Rules[1]
+	if r1.Keyword != "test" || r1.Model != "haiku" {
+		t.Errorf("rule[1] = %+v", r1)
+	}
+	if plan.Settings.Budget != 15.50 {
+		t.Errorf("budget = %f, want 15.50", plan.Settings.Budget)
+	}
+}
