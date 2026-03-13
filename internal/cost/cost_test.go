@@ -3,9 +3,12 @@ package cost
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/brianaffirm/towr/internal/dispatch"
+	"github.com/brianaffirm/towr/internal/router"
 )
 
 func TestCalculate(t *testing.T) {
@@ -102,5 +105,74 @@ func TestEstimateTokens(t *testing.T) {
 	}
 	if usage.Source != "estimated" {
 		t.Errorf("source = %q, want estimated", usage.Source)
+	}
+}
+
+func TestFormatPreRun(t *testing.T) {
+	items := []PreRunItem{
+		{TaskID: "auth", Decision: router.Decision{Model: "opus", Reason: "policy:infrastructure/**"}, EstCost: 2.80},
+		{TaskID: "api", Decision: router.Decision{Model: "sonnet", Reason: "heuristic:standard"}, EstCost: 0.12},
+	}
+	out := FormatPreRun("my-sprint", items)
+	if !strings.Contains(out, "my-sprint") {
+		t.Error("should contain plan name")
+	}
+	if !strings.Contains(out, "opus") {
+		t.Error("should contain model")
+	}
+	if !strings.Contains(out, "Savings:") {
+		t.Error("should contain savings line")
+	}
+}
+
+func TestFormatPostRun(t *testing.T) {
+	items := []PostRunItem{
+		{TaskID: "auth", Model: "opus", Usage: TokenUsage{InputTokens: 12450, OutputTokens: 38200, Source: "jsonl-parsed"}, ActualCost: 3.80, OpusCost: 3.80},
+		{TaskID: "api", Model: "sonnet", Usage: TokenUsage{InputTokens: 8200, OutputTokens: 21100, Source: "jsonl-parsed"}, ActualCost: 0.34, OpusCost: 3.32},
+	}
+	out := FormatPostRun(items, 45*time.Second)
+	if !strings.Contains(out, "Total:") {
+		t.Error("should contain total")
+	}
+	if !strings.Contains(out, "Saved:") {
+		t.Error("should contain saved")
+	}
+	if !strings.Contains(out, "45s") {
+		t.Error("should contain duration")
+	}
+}
+
+func TestFmtTokens(t *testing.T) {
+	tests := []struct {
+		input int
+		want  string
+	}{
+		{500, "500"},
+		{1000, "1,000"},
+		{12450, "12,450"},
+		{0, "0"},
+	}
+	for _, tt := range tests {
+		got := fmtTokens(tt.input)
+		if got != tt.want {
+			t.Errorf("fmtTokens(%d) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		d    time.Duration
+		want string
+	}{
+		{45 * time.Second, "45s"},
+		{2*time.Minute + 30*time.Second, "2m30s"},
+		{12*time.Minute + 34*time.Second, "12m34s"},
+	}
+	for _, tt := range tests {
+		got := formatDuration(tt.d)
+		if got != tt.want {
+			t.Errorf("formatDuration(%v) = %q, want %q", tt.d, got, tt.want)
+		}
 	}
 }
