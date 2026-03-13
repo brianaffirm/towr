@@ -25,6 +25,8 @@ Proceed? [Y/n]
 
 This run cost $3.48. Opus-for-everything would have cost $14.40. **towr saved you $10.92.**
 
+Engineering teams adopting AI coding agents are spending $500K+/year on model API costs — and most of that spend is Opus-tier when the majority of tasks (tests, docs, routine implementation) succeed fine on Sonnet or Haiku. Smart routing alone can cut that bill by 40-70%, saving $200K-$350K annually per team. At enterprise scale with multiple teams, that's seven figures back in the budget.
+
 towr is the governance layer between your AI agents and your main branch. It routes tasks to the cheapest model likely to succeed, validates every merge with hooks and tests, audits every action, and shows you what you saved. Nothing lands without validation. Nothing spends without visibility.
 
 towr works with **any agent runtime** — Claude Code, Cursor, Codex, Aider, or anything that runs in a terminal. Mix them per task in the same plan. Each agent gets its own sandboxed worktree; towr handles the isolation, merging, and audit trail regardless of which tool wrote the code.
@@ -128,6 +130,8 @@ Run complete: 6/6 tasks succeeded (18m30s)
 ```
 
 Token usage is parsed from Claude's JSONL session logs when available, or estimated from prompt length for other runtimes. Budget caps (`--budget $10`) stop new tasks when spend exceeds the limit.
+
+**The math at scale:** A team running 20 agent tasks/day at an average Opus cost of ~$2.40/task spends ~$17.5K/month. Smart routing shifts 70% of those tasks to Sonnet or Haiku, dropping the average to ~$0.60/task — saving over $150K/year. Multiply by the number of teams in your org.
 
 ## Safety model
 
