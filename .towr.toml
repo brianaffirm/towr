@@ -1,0 +1,3 @@
+[workspace]
+# Copy .claude/ into every worktree so agents get the permission allowlist.
+copy_paths = [".claude"]

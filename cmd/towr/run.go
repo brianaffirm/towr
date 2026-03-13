@@ -243,12 +243,41 @@ func runSpawnAndDispatch(app *appContext, plan *orchestrate.Plan, task *orchestr
 		Data: map[string]interface{}{"dispatch_id": dispID, "prompt": prompt, "model": model, "agent": agentName},
 	})
 
-	// Launch agent + send prompt (reuse dispatch logic).
+	// Launch agent directly in the tmux pane and paste the prompt.
 	go func() {
-		towrBin, _ := os.Executable()
-		cmd := exec.Command(towrBin, "dispatch", task.ID, prompt)
-		cmd.Dir = app.repoRoot
-		_ = cmd.Run()
+		// Send launch command.
+		launchCmd := ag.LaunchCommand()
+		_ = app.term.PasteBuffer(task.ID, launchCmd)
+		time.Sleep(500 * time.Millisecond)
+		_ = app.term.SendKeys(task.ID, "Enter")
+
+		// Wait for agent to start (check for idle pattern).
+		startupKey := ag.StartupKey()
+		for i := 0; i < 40; i++ {
+			time.Sleep(1500 * time.Millisecond)
+			captured, err := app.term.CapturePane(task.ID, 50)
+			if err != nil {
+				continue
+			}
+			// Handle trust/startup dialogs.
+			for _, pattern := range ag.StartupDialogs() {
+				if strings.Contains(captured, pattern) {
+					_ = app.term.SendKeys(task.ID, startupKey)
+					time.Sleep(1 * time.Second)
+					break
+				}
+			}
+			// Check if agent is ready.
+			if strings.Contains(captured, ag.IdlePattern()) {
+				break
+			}
+		}
+
+		// Send the prompt.
+		time.Sleep(500 * time.Millisecond)
+		_ = app.term.PasteBuffer(task.ID, prompt)
+		time.Sleep(500 * time.Millisecond)
+		_ = app.term.SendKeys(task.ID, "Enter")
 	}()
 
 	st.status = "running"
@@ -368,24 +397,24 @@ func runAutoApprove(app *appContext, plan *orchestrate.Plan) {
 		return
 	}
 
-	allWS, err := app.store.ListWorkspaces(app.repoRoot, store.ListFilter{})
-	if err != nil {
-		return
-	}
-
-	for _, ws := range allWS {
-		status := workspace.WorkspaceStatus(ws.Status)
-		if status != workspace.StatusRunning {
-			continue
-		}
-
-		captured, err := app.term.CapturePane(ws.ID, 200)
+	// Check ALL plan tasks for blocked dialogs — don't filter by store status.
+	for _, task := range plan.Tasks {
+		captured, err := app.term.CapturePane(task.ID, 200)
 		if err != nil {
 			continue
 		}
 
-		ag := agent.Get(ws.AgentRuntime)
-		lastActivity := app.term.PaneLastActivity(ws.ID)
+		// Resolve agent from plan task.
+		model := task.Model
+		if model == "" {
+			model = plan.Settings.DefaultModel
+		}
+		agentType := task.Agent
+		if agentType == "" {
+			agentType = plan.Settings.DefaultAgent
+		}
+		ag := agent.GetWithModel(model, agentType)
+		lastActivity := app.term.PaneLastActivity(task.ID)
 		state := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 5*time.Second)
 
 		if state == dispatch.PaneBlocked {
@@ -397,11 +426,11 @@ func runAutoApprove(app *appContext, plan *orchestrate.Plan) {
 				approveKey = "a"
 			}
 
-			if err := app.term.SendKeys(ws.ID, approveKey); err == nil {
-				fmt.Printf("[%s] ✓ %s: auto-approved\n", fmtTime(), ws.ID)
+			if err := app.term.SendKeys(task.ID, approveKey); err == nil {
+				fmt.Printf("[%s] ✓ %s: auto-approved\n", fmtTime(), task.ID)
 				_ = app.store.EmitEvent(store.Event{
 					ID: uuid.New().String(), Kind: "task.approved",
-					WorkspaceID: ws.ID, RepoRoot: app.repoRoot, Timestamp: time.Now().UTC(),
+					WorkspaceID: task.ID, RepoRoot: app.repoRoot, Timestamp: time.Now().UTC(),
 					Data: map[string]interface{}{"approve_key": approveKey, "source": "run"},
 				})
 			}
