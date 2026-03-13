@@ -117,7 +117,7 @@
     var bypassColor = totalBypasses > 0 ? "#f85149" : "#3fb950";
     var bypassClass = totalBypasses > 0 ? " stat-pulse" : "";
 
-    var bar = document.getElementById("statsBar");
+    var bar = document.getElementById("counters");
     bar.innerHTML =
       '<span class="stat-pill" style="color:#c9d1d9;background:#30363d">' + total + " total</span>" +
       '<span class="stat-pill" style="color:#58a6ff;background:#58a6ff22">' + working + " working</span>" +
@@ -135,7 +135,7 @@
     });
 
     if (sorted.length === 0) {
-      document.getElementById("sidebar").innerHTML =
+      document.getElementById("workspaceList").innerHTML =
         '<div class="empty-state">No workspaces found.</div>';
       return;
     }
@@ -168,7 +168,7 @@
       html += "</div>";
     });
     html += "</div>";
-    document.getElementById("sidebar").innerHTML = html;
+    document.getElementById("workspaceList").innerHTML = html;
 
     // Bind events
     document.querySelectorAll(".card").forEach(function (el) {

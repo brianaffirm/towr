@@ -163,5 +163,6 @@
     });
   }
 
-  document.getElementById("termClose").addEventListener("click", closePanel);
+  var termClose = document.getElementById("termClose");
+  if (termClose) termClose.addEventListener("click", closePanel);
 })();
