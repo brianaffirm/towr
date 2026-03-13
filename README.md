@@ -46,6 +46,16 @@ settings:
   default_agent: claude-code     # tasks without agent: use this
 ```
 
+## Why model providers won't build this
+
+Anthropic and OpenAI are great at building agents that get work done — Agent Teams, Codex, operator frameworks that drive usage. That's their business: more tasks, more tokens, more spend.
+
+A tool that routes your tasks to the *cheapest* model? That cuts their revenue. Every task towr sends to Haiku instead of Opus is money left on the table for the model provider. No vendor is going to ship a first-party feature that tells you "actually, you don't need our most expensive product for this."
+
+This is a structural incentive problem, not a capability gap. The providers will keep building better agents, faster execution, more parallel workers — all of which *increase* token consumption. The cost optimization layer has to come from somewhere else.
+
+towr sits in that gap: vendor-neutral, runtime-agnostic, aligned with the customer's budget instead of the provider's revenue model.
+
 ## Three pillars
 
 ### 1. Smart router — the brain
