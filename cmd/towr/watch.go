@@ -770,7 +770,9 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 					} else if strings.Contains(recapture, "Trust this workspace") {
 						reKey = "a"
 					}
-					_ = app.term.SendKeys(ws.ID, reKey)
+					if err := app.term.SendKeys(ws.ID, reKey); err != nil {
+						break
+					}
 					_ = app.store.EmitEvent(store.Event{
 						ID:          uuid.New().String(),
 						Kind:        "task.approved",
