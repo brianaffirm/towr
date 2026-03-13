@@ -179,20 +179,18 @@
   // --- Main render ---
   function render(data) {
     var json = JSON.stringify(data);
+    // Always refresh counters and safety (approval counts change independently).
     renderCounters(data);
+    (data || []).forEach(function (ws) { fetchSafety(ws.id); });
     if (json !== lastJSON) {
       lastJSON = json;
       renderWorkspaces(data);
-      (data || []).forEach(function (ws) { fetchSafety(ws.id); });
-    } else {
-      // Just update uptime
-      var el = document.querySelector('.counter-label');
     }
   }
 
   // --- Export ---
   document.getElementById("exportAudit").addEventListener("click", function () {
-    window.location.href = "/api/audit/export?format=csv&since=7d";
+    window.location.href = "/api/audit/export?format=csv&since=168h";
   });
 
   // --- Poll ---

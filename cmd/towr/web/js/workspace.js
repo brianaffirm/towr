@@ -127,9 +127,9 @@
     var steps = [];
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
-      // Claude: ⏺ prefix, Codex: • prefix
-      if (line.match(/^[\u23FA\u2B58\u25CF\u2022\u2B24]/) || line.match(/^\u2022/) || line.indexOf("\u23FA") === 0) {
-        var label = line.replace(/^[\u23FA\u2B58\u25CF\u2022\u2B24\s]+/, "").trim();
+      // Claude: ⏺ (U+23FA) prefix, Codex: • (U+2022) prefix
+      if (line.match(/[\u23FA\u2B58\u2022\u25CF]/) && line.length > 2) {
+        var label = line.replace(/^[\s\u23FA\u2B58\u25CF\u2022\u2B24]+/, "").trim();
         if (label) {
           var kind = classifyStep(label);
           var done = line.indexOf("\u2713") >= 0 || line.indexOf("✓") >= 0;
