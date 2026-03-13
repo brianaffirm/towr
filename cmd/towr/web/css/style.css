@@ -450,3 +450,70 @@ header h1 {
   .workspace-list { padding: var(--space-sm) var(--space-md); min-height: auto; }
   .activity-feed.open { max-height: 200px; }
 }
+
+/* === Cost Panel === */
+.cost-panel {
+  margin: 0 var(--space-lg);
+  padding: var(--space-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: none;
+}
+.cost-panel.visible { display: block; }
+.cost-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-sm);
+}
+.cost-panel-title {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+}
+.cost-panel-savings {
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: var(--accent-green);
+}
+.cost-panel-body {
+  display: flex;
+  gap: var(--space-lg);
+  font-size: 0.8rem;
+}
+.cost-panel-body .label {
+  color: var(--text-secondary);
+  margin-right: var(--space-xs);
+}
+.cost-panel-body .value {
+  color: var(--text-primary);
+  font-weight: bold;
+}
+.cost-panel-body .value.muted {
+  color: var(--text-muted);
+  font-weight: normal;
+  text-decoration: line-through;
+}
+.cost-panel-body .value.green {
+  color: var(--accent-green);
+}
+
+/* === Model Badge (inline on workspace rows) === */
+.model-badge {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.model-badge.haiku  { color: #58a6ff; background: rgba(88, 166, 255, 0.12); }
+.model-badge.sonnet { color: #a78bfa; background: rgba(167, 139, 250, 0.12); }
+.model-badge.opus   { color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+
+.cost-badge {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}

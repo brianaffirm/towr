@@ -11,6 +11,12 @@
   var PAGE_LOAD = Date.now();
   var lastJSON = "";
   var safetyCache = {};
+  var costCache = { tasks: [] };
+  var MODEL_COLORS = {
+      haiku: "#58a6ff",
+      sonnet: "#a78bfa",
+      opus: "#f59e0b"
+  };
 
   function statusColor(s) { return STATUS_COLORS[(s || "").toUpperCase()] || DEFAULT_COLOR; }
 
@@ -82,6 +88,16 @@
     }
   }
 
+  function buildCostLookup(costData) {
+      var lookup = {};
+      if (costData && costData.tasks) {
+          costData.tasks.forEach(function (t) {
+              lookup[t.id] = t;
+          });
+      }
+      return lookup;
+  }
+
   // --- Counters ---
   function renderCounters(data) {
     var total = data.length, working = 0, blocked = 0, completed = 0;
@@ -118,8 +134,30 @@
     document.getElementById("counters").innerHTML = html;
   }
 
+  function renderCostPanel(data) {
+      var panel = document.getElementById("costPanel");
+      if (!data || data.totalSpent === 0) {
+          panel.classList.remove("visible");
+          return;
+      }
+      panel.classList.add("visible");
+
+      var html = '<div class="cost-panel-header">';
+      html += '<span class="cost-panel-title">Cost Intelligence</span>';
+      html += '<span class="cost-panel-savings">' + Math.round(data.savingsPercent) + '% saved</span>';
+      html += '</div>';
+      html += '<div class="cost-panel-body">';
+      html += '<span><span class="label">Spent:</span><span class="value green">$' + data.totalSpent.toFixed(2) + '</span></span>';
+      html += '<span><span class="label">All-opus:</span><span class="value muted">$' + data.totalOpus.toFixed(2) + '</span></span>';
+      html += '<span><span class="label">Saved:</span><span class="value green">$' + data.totalSaved.toFixed(2) + '</span></span>';
+      html += '</div>';
+
+      panel.innerHTML = html;
+  }
+
   // --- Workspace list ---
   function renderWorkspaces(data) {
+    var costLookup = buildCostLookup(costCache);
     var sorted = data.slice().sort(function (a, b) {
       return sortPriority(a.status) - sortPriority(b.status);
     });
@@ -140,7 +178,7 @@
       html += '<div class="' + cls + '" data-id="' + esc(ws.id) + '" style="border-left-color:' + c + '">';
       html += '<div class="status-dot" style="background:' + c + '"></div>';
       html += '<span class="ws-name">' + esc(ws.id) + '</span>';
-      if (ws.agent) {
+      if (ws.agent && !costLookup[ws.id]) {
         var agentLabel = ws.agent;
         var agentColor = "var(--text-muted)";
         if (agentLabel.indexOf("sonnet") >= 0) agentColor = "#a78bfa";
@@ -151,6 +189,11 @@
       }
       html += '<span class="ws-step">' + esc(ws.task || "-") + '</span>';
       html += '<span class="shield" data-shield="' + esc(ws.id) + '"></span>';
+      var taskCost = costLookup[ws.id];
+      if (taskCost) {
+        html += '<span class="model-badge ' + esc(taskCost.model) + '">' + esc(taskCost.model) + '</span>';
+        html += '<span class="cost-badge">$' + taskCost.cost.toFixed(2) + '</span>';
+      }
       html += '<span class="ws-badge" style="color:' + c + ';background:' + c + '22">' + esc(ws.status) + '</span>';
       if (ws.diff && ws.diff !== "-") html += '<span class="ws-agent">' + esc(ws.diff) + '</span>';
       html += '<span class="ws-agent">' + esc(ws.age) + '</span>';
@@ -206,6 +249,10 @@
     fetch("/api/workspaces").then(function (r) { return r.json(); }).then(render).catch(function () {});
     fetch("/api/events").then(function (r) { return r.json(); }).then(function (events) {
       if (typeof renderActivity === "function") renderActivity(events);
+    }).catch(function () {});
+    fetch("/api/cost").then(function (r) { return r.json(); }).then(function (data) {
+      costCache = data;
+      renderCostPanel(data);
     }).catch(function () {});
     setTimeout(poll, 4000);
   }
