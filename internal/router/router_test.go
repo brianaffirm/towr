@@ -238,6 +238,9 @@ func TestRoute_NonClaudeAgent(t *testing.T) {
 	task := orchestrate.Task{ID: "t1", Prompt: "build the UI", Agent: "cursor"}
 	settings := orchestrate.Settings{}
 	d := Route(task, settings)
+	if d.Model != "cursor-auto" {
+		t.Errorf("model = %q, want cursor-auto", d.Model)
+	}
 	if d.CanEscalate {
 		t.Error("cursor agent should not be escalatable")
 	}
@@ -311,5 +314,30 @@ func TestEscalate_ExplicitCantEscalate(t *testing.T) {
 	_, ok := Escalate(d)
 	if ok {
 		t.Fatal("explicit model should not escalate")
+	}
+}
+
+func TestRoute_ExternalAgent_DefaultModel(t *testing.T) {
+	task := orchestrate.Task{ID: "t1", Prompt: "build the UI", Agent: "codex"}
+	d := Route(task, orchestrate.Settings{})
+	if d.Model != "codex-mini" {
+		t.Errorf("model = %q, want codex-mini", d.Model)
+	}
+	if d.Reason != "external-agent:codex" {
+		t.Errorf("reason = %q, want external-agent:codex", d.Reason)
+	}
+	if d.CanEscalate {
+		t.Error("external agent should not be escalatable")
+	}
+}
+
+func TestRoute_ExternalAgent_ExplicitModel(t *testing.T) {
+	task := orchestrate.Task{ID: "t1", Prompt: "heavy task", Agent: "codex", Model: "gpt-5.3-codex"}
+	d := Route(task, orchestrate.Settings{})
+	if d.Model != "gpt-5.3-codex" {
+		t.Errorf("model = %q, want gpt-5.3-codex", d.Model)
+	}
+	if d.Reason != "external-agent:codex" {
+		t.Errorf("reason = %q, want external-agent:codex", d.Reason)
 	}
 }

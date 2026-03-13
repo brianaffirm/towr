@@ -45,7 +45,7 @@ func TestEndToEnd_RoutingAndCost(t *testing.T) {
 		"infra-change":  {model: "opus", reasonPrefix: "policy:infrastructure", requireApproval: true, canEscalate: true},
 		"arch-redesign": {model: "opus", reasonPrefix: "heuristic:complex", canEscalate: false},
 		"explicit-opus": {model: "opus", reasonPrefix: "explicit", canEscalate: false},
-		"cursor-task":   {model: "haiku", reasonPrefix: "external-agent:cursor", canEscalate: false},
+		"cursor-task":   {model: "cursor-auto", reasonPrefix: "external-agent:cursor", canEscalate: false},
 	}
 
 	var totalCost, opusTotalCost float64
