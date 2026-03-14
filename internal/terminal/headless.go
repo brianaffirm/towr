@@ -36,19 +36,23 @@ func (h *HeadlessBackend) IsPaneAlive(id string) (bool, error) {
 	return false, nil
 }
 
-func (h *HeadlessBackend) SendKeys(id, keys string) error {
-	return nil
+func (h *HeadlessBackend) SendInput(id, content string) error {
+	return fmt.Errorf("send not supported in headless mode")
 }
 
-func (h *HeadlessBackend) PasteBuffer(id, content string) error {
-	return fmt.Errorf("paste-buffer not supported in headless mode")
+func (h *HeadlessBackend) Interrupt(id string) error {
+	return fmt.Errorf("interrupt not supported in headless mode")
 }
 
-func (h *HeadlessBackend) CapturePane(id string, lines int) (string, error) {
-	return "", fmt.Errorf("capture-pane not supported in headless mode")
+func (h *HeadlessBackend) Approve(id, key string) error {
+	return fmt.Errorf("approve not supported in headless mode")
 }
 
-func (h *HeadlessBackend) PaneLastActivity(id string) time.Time {
+func (h *HeadlessBackend) CaptureOutput(id string, lines int) (string, error) {
+	return "", fmt.Errorf("capture not supported in headless mode")
+}
+
+func (h *HeadlessBackend) LastActivity(id string) time.Time {
 	return time.Time{}
 }
 

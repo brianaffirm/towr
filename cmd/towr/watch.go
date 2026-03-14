@@ -126,18 +126,10 @@ func (c *repoStoreCache) getStore(repoRoot string) (*store.SQLiteStore, error) {
 func (c *repoStoreCache) getTerm(_ string) terminal.Backend {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	// All repos share the same tmux backend.
 	if t, ok := c.terms["default"]; ok {
 		return t
 	}
-
-	var term terminal.Backend
-	if _, err := exec.LookPath("tmux"); err != nil {
-		term = terminal.NewHeadlessBackend()
-	} else {
-		term = terminal.NewTmuxBackend("towr")
-	}
+	term := terminal.NewBackend()
 	c.terms["default"] = term
 	return term
 }
@@ -397,9 +389,9 @@ func pollWorkspacesAllRepos(cache *repoStoreCache, states map[string]*watchState
 		// Look up the agent for this workspace to use correct dialog/idle patterns.
 		ag := agent.Get(ws.AgentRuntime)
 
-		captured, captErr := term.CapturePane(ws.ID, 200)
+		captured, captErr := term.CaptureOutput(ws.ID, 200)
 		if captErr == nil {
-			lastActivity := term.PaneLastActivity(ws.ID)
+			lastActivity := term.LastActivity(ws.ID)
 			capState := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 15*time.Second)
 			if capState == dispatch.PaneBlocked {
 				currentState = dispatch.PaneBlocked
@@ -580,9 +572,9 @@ func pollWorkspaces(app *appContext, states map[string]*watchState, autoApprove 
 
 		ag := agent.Get(ws.AgentRuntime)
 
-		captured, captErr := app.term.CapturePane(ws.ID, 200)
+		captured, captErr := app.term.CaptureOutput(ws.ID, 200)
 		if captErr == nil {
-			lastActivity := app.term.PaneLastActivity(ws.ID)
+			lastActivity := app.term.LastActivity(ws.ID)
 			capState := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 15*time.Second)
 			if capState == dispatch.PaneBlocked {
 				currentState = dispatch.PaneBlocked
@@ -718,7 +710,7 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 			} else if strings.Contains(captured, "Trust this workspace") {
 				approveKey = "a" // Cursor trust dialog
 			}
-			if err := app.term.SendKeys(ws.ID, approveKey); err == nil {
+			if err := app.term.Approve(ws.ID, approveKey); err == nil {
 				st.finalStatus = "working"
 				// Record approval in the event store for audit trail.
 				_ = app.store.EmitEvent(store.Event{
@@ -754,11 +746,11 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 				wsAgent := agent.Get(ws.AgentRuntime)
 				for retry := 0; retry < 5; retry++ {
 					time.Sleep(3 * time.Second)
-					recapture, recapErr := app.term.CapturePane(ws.ID, 200)
+					recapture, recapErr := app.term.CaptureOutput(ws.ID, 200)
 					if recapErr != nil {
 						break
 					}
-					reActivity := app.term.PaneLastActivity(ws.ID)
+					reActivity := app.term.LastActivity(ws.ID)
 					reState := dispatch.DetectPaneStateWithPatterns(recapture, wsAgent.DialogIndicators(), wsAgent.IdlePattern(), reActivity, 5*time.Second)
 					if reState != dispatch.PaneBlocked {
 						break
@@ -770,7 +762,7 @@ func handleTransition(app *appContext, ws *store.Workspace, st *watchState, newS
 					} else if strings.Contains(recapture, "Trust this workspace") {
 						reKey = "a"
 					}
-					if err := app.term.SendKeys(ws.ID, reKey); err != nil {
+					if err := app.term.Approve(ws.ID, reKey); err != nil {
 						break
 					}
 					_ = app.store.EmitEvent(store.Event{

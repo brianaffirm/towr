@@ -34,7 +34,7 @@ func newSendCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comm
 
 			// --approve mode: just send Enter to approve a permission dialog.
 			if approveFlag {
-				if err := app.term.SendKeys(wsID, "Enter"); err != nil {
+				if err := app.term.Approve(wsID, "Enter"); err != nil {
 					return fmt.Errorf("send enter: %w", err)
 				}
 				fmt.Printf("Sent approval to %s\n", wsID)
@@ -59,17 +59,17 @@ func newSendCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comm
 				return fmt.Errorf("workspace %q is %s (must be IDLE or READY to send follow-up)", wsID, sw.Status)
 			}
 
-			// 2. Check tmux session alive.
+			// 2. Check agent session alive.
 			alive, err := app.term.IsPaneAlive(wsID)
 			if err != nil {
-				return fmt.Errorf("check tmux session: %w", err)
+				return fmt.Errorf("check agent session: %w", err)
 			}
 			if !alive {
-				return fmt.Errorf("tmux session for workspace %q is not running", wsID)
+				return fmt.Errorf("agent session for workspace %q is not running", wsID)
 			}
 
 			// 3. Verify Claude is idle in the pane (❯ visible).
-			captured, err := app.term.CapturePane(wsID, 50)
+			captured, err := app.term.CaptureOutput(wsID, 50)
 			if err != nil {
 				return fmt.Errorf("capture pane: %w", err)
 			}
@@ -122,8 +122,8 @@ func newSendCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comm
 				return fmt.Errorf("update workspace status: %w", err)
 			}
 
-			// 8. Send the message via PasteBuffer.
-			if err := app.term.PasteBuffer(wsID, message); err != nil {
+			// 8. Send the message via SendInput.
+			if err := app.term.SendInput(wsID, message); err != nil {
 				return fmt.Errorf("send message: %w", err)
 			}
 

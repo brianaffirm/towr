@@ -93,13 +93,8 @@ func run() error {
 		wsStore := &storeAdapter{s: s, repoRoot: repoRoot}
 		mgr := workspace.NewManager(wsStore)
 
-		// Terminal backend: use tmux if available, else headless.
-		var term terminal.Backend
-		term = terminal.NewTmuxBackend("towr")
-		// Fall back to headless if tmux is not installed.
-		if _, err := lookupTmux(); err != nil {
-			term = terminal.NewHeadlessBackend()
-		}
+		// Terminal backend: auto-detects tmux vs headless.
+		term := terminal.NewBackend()
 
 		app = &appContext{
 			repoRoot: repoRoot,
@@ -190,11 +185,7 @@ func initAppForRepo(repoRoot string) (*appContext, error) {
 	wsStore := &storeAdapter{s: s, repoRoot: repoRoot}
 	mgr := workspace.NewManager(wsStore)
 
-	var term terminal.Backend
-	term = terminal.NewTmuxBackend("towr")
-	if _, err := lookupTmux(); err != nil {
-		term = terminal.NewHeadlessBackend()
-	}
+	term := terminal.NewBackend()
 
 	return &appContext{
 		repoRoot: repoRoot,
@@ -227,13 +218,8 @@ func resolveGlobal(ref string) (*store.Workspace, *store.SQLiteStore, terminal.B
 		return nil, nil, nil, fmt.Errorf("open store for %s: %w", sw.RepoRoot, err)
 	}
 
-	// Create a terminal backend (tmux if available, headless if not).
-	var term terminal.Backend
-	if _, lookupErr := lookupTmux(); lookupErr != nil {
-		term = terminal.NewHeadlessBackend()
-	} else {
-		term = terminal.NewTmuxBackend("towr")
-	}
+	// Create a terminal backend (auto-detects tmux vs headless).
+	term := terminal.NewBackend()
 
 	return sw, s, term, nil
 }

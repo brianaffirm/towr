@@ -81,16 +81,12 @@ func newWebCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comma
 				if app != nil {
 					term = app.term
 				} else {
-					if _, err := lookupTmux(); err != nil {
-						http.Error(w, "tmux not available", 500)
-						return
-					}
-					term = terminal.NewTmuxBackend("towr")
+					term = terminal.NewBackend()
 				}
 
 				switch action {
 				case "approve":
-					if err := term.SendKeys(id, "Enter"); err != nil {
+					if err := term.Approve(id, "Enter"); err != nil {
 						http.Error(w, err.Error(), 500)
 						return
 					}
@@ -103,7 +99,7 @@ func newWebCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comma
 						http.Error(w, "missing message", 400)
 						return
 					}
-					if err := term.PasteBuffer(id, body.Message); err != nil {
+					if err := term.SendInput(id, body.Message); err != nil {
 						http.Error(w, err.Error(), 500)
 						return
 					}
@@ -275,11 +271,7 @@ func newWebCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comma
 				if app != nil {
 					term = app.term
 				} else {
-					if _, err := lookupTmux(); err != nil {
-						http.Error(w, "tmux not available", 500)
-						return
-					}
-					term = terminal.NewTmuxBackend("towr")
+					term = terminal.NewBackend()
 				}
 
 				flusher, ok := w.(http.Flusher)
@@ -319,7 +311,7 @@ func newWebCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comma
 }
 
 func sendCapture(w http.ResponseWriter, flusher http.Flusher, term terminal.Backend, id string) {
-	output, err := term.CapturePane(id, 50)
+	output, err := term.CaptureOutput(id, 50)
 	if err != nil {
 		fmt.Fprintf(w, "data: [error: %s]\n\n", err.Error())
 		flusher.Flush()

@@ -222,7 +222,7 @@ func TestIsPaneAliveChecksSession(t *testing.T) {
 	}
 }
 
-func TestSendKeysTargetsSession(t *testing.T) {
+func TestApproveTargetsSession(t *testing.T) {
 	skipIfNoTmux(t)
 
 	b := NewTmuxBackend("towr-test-keys")
@@ -233,9 +233,9 @@ func TestSendKeysTargetsSession(t *testing.T) {
 		t.Fatalf("CreatePane: %v", err)
 	}
 
-	// SendKeys should not error when targeting the session.
-	if err := b.SendKeys("ws1", "echo hello"); err != nil {
-		t.Errorf("SendKeys failed: %v", err)
+	// Approve should not error when targeting the session.
+	if err := b.Approve("ws1", "Enter"); err != nil {
+		t.Errorf("Approve failed: %v", err)
 	}
 }
 

@@ -126,9 +126,9 @@ func newWaitCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Comm
 						continue
 					}
 
-					// For interactive dispatches, poll CapturePane.
+					// For interactive dispatches, poll CaptureOutput.
 					if ad.mode == "interactive" {
-						captured, captErr := app.term.CapturePane(ad.wsID, 200)
+						captured, captErr := app.term.CaptureOutput(ad.wsID, 200)
 						if captErr != nil {
 							continue
 						}

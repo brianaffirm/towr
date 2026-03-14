@@ -8,7 +8,6 @@ import (
 
 	"github.com/brianaffirm/towr/internal/git"
 	"github.com/brianaffirm/towr/internal/store"
-	"github.com/brianaffirm/towr/internal/terminal"
 	"github.com/spf13/cobra"
 )
 
@@ -40,13 +39,8 @@ Agents call this after making changes — no special protocol needed.`,
 				return err
 			}
 
-			tmuxBackend, ok := app.term.(*terminal.TmuxBackend)
-			if !ok {
-				return fmt.Errorf("preview requires tmux backend")
-			}
-
 			if closeFlag {
-				return closePreviewPane(tmuxBackend, ws.ID)
+				return closePreviewPane(ws.ID)
 			}
 
 			// Build the content command to display.
@@ -81,7 +75,7 @@ Agents call this after making changes — no special protocol needed.`,
 			// Build header line.
 			header := buildPreviewHeader(ws.ID, diffFlag, args)
 
-			return showInPreviewPane(tmuxBackend, ws.ID, header, contentCmd)
+			return showInPreviewPane(ws.ID, header, contentCmd)
 		},
 	}
 
@@ -131,7 +125,7 @@ func previewPaneID(workspaceID string) string {
 // showInPreviewPane creates a split pane that runs the content command.
 // The pane auto-closes when the command (less) exits — no lingering shell.
 // If a preview pane already exists, it's killed first.
-func showInPreviewPane(tmux *terminal.TmuxBackend, wsID, header, contentCmd string) error {
+func showInPreviewPane(wsID, header, contentCmd string) error {
 	session := "towr/" + wsID
 	chatWindow := session + ":chat"
 
@@ -164,7 +158,7 @@ func showInPreviewPane(tmux *terminal.TmuxBackend, wsID, header, contentCmd stri
 
 
 // closePreviewPane kills the preview pane for a workspace.
-func closePreviewPane(tmux *terminal.TmuxBackend, wsID string) error {
+func closePreviewPane(wsID string) error {
 	session := "towr/" + wsID
 	previewPane := session + ":chat.1"
 

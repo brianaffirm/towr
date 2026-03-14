@@ -109,10 +109,8 @@ func newCleanupCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.C
 						return err
 					}
 					// Non-repo cleanup: destroy tmux + delete store record.
-					if _, lookupErr := lookupTmux(); lookupErr == nil {
-						nrTerm := terminal.NewTmuxBackend("towr")
-						_ = nrTerm.DestroyPane(wsID)
-					}
+					nrTerm := terminal.NewBackend()
+					_ = nrTerm.DestroyPane(wsID)
 					if delErr := nrStore.DeleteWorkspace("", wsID); delErr != nil {
 						return fmt.Errorf("cleanup failed: %w", delErr)
 					}

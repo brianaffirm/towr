@@ -80,13 +80,13 @@ func newDispatchCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.
 				}
 			}
 
-			// 3. Check tmux session alive.
+			// 3. Check agent session alive.
 			alive, err := app.term.IsPaneAlive(wsID)
 			if err != nil {
-				return fmt.Errorf("check tmux session: %w", err)
+				return fmt.Errorf("check agent session: %w", err)
 			}
 			if !alive {
-				return fmt.Errorf("tmux session for workspace %q is not running", wsID)
+				return fmt.Errorf("agent session for workspace %q is not running", wsID)
 			}
 
 			// 4. Generate dispatch ID.
@@ -160,10 +160,10 @@ func runHeadlessDispatch(app *appContext, sw *store.Workspace, wsID, dispatchID,
 		return fmt.Errorf("update workspace status: %w", err)
 	}
 
-	// Deliver via PasteBuffer.
+	// Deliver via SendInput.
 	runCmd := dispatch.BuildRunCommand(commsDir)
-	if err := app.term.PasteBuffer(wsID, runCmd); err != nil {
-		return fmt.Errorf("paste buffer: %w", err)
+	if err := app.term.SendInput(wsID, runCmd); err != nil {
+		return fmt.Errorf("send input: %w", err)
 	}
 
 	// Output dispatch ID.
@@ -209,16 +209,16 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 	}
 
 	// Check if Claude is already running in the pane by looking for ❯.
-	captured, err := app.term.CapturePane(wsID, 50)
+	captured, err := app.term.CaptureOutput(wsID, 50)
 	if err != nil {
-		return fmt.Errorf("capture pane: %w", err)
+		return fmt.Errorf("capture output: %w", err)
 	}
 
 	// Select agent based on workspace metadata.
 	ag := agent.Get(sw.AgentRuntime)
 
 	// Check if agent is already running and idle using agent-specific patterns.
-	lastActivity := app.term.PaneLastActivity(wsID)
+	lastActivity := app.term.LastActivity(wsID)
 	paneState := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 15*time.Second)
 	if paneState != dispatch.PaneIdle {
 		// Acquire launch lock to prevent concurrent agent startups.
@@ -228,7 +228,7 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 		}
 
 		// Agent not running or not idle — launch it.
-		if err := app.term.PasteBuffer(wsID, ag.LaunchCommand()); err != nil {
+		if err := app.term.SendInput(wsID, ag.LaunchCommand()); err != nil {
 			unlock()
 			return fmt.Errorf("launch %s: %w", ag.Name(), err)
 		}
@@ -238,7 +238,7 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 		started := false
 		for i := 0; i < 40; i++ { // up to ~60 seconds
 			time.Sleep(1500 * time.Millisecond)
-			captured, err = app.term.CapturePane(wsID, 50)
+			captured, err = app.term.CaptureOutput(wsID, 50)
 			if err != nil {
 				continue
 			}
@@ -248,7 +248,7 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 			dismissed := false
 			for _, pattern := range startupDialogs {
 				if strings.Contains(captured, pattern) {
-					_ = app.term.SendKeys(wsID, startupKey)
+					_ = app.term.Approve(wsID, startupKey)
 					time.Sleep(1 * time.Second)
 					dismissed = true
 					break
@@ -270,8 +270,8 @@ func runInteractiveDispatch(app *appContext, sw *store.Workspace, wsID, dispatch
 		}
 	}
 
-	// Send the prompt via PasteBuffer (plain text, not a wrapper script).
-	if err := app.term.PasteBuffer(wsID, prompt); err != nil {
+	// Send the prompt via SendInput (plain text, not a wrapper script).
+	if err := app.term.SendInput(wsID, prompt); err != nil {
 		return fmt.Errorf("send prompt: %w", err)
 	}
 
@@ -358,12 +358,12 @@ func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.D
 		// or as primary detection if JSONL is unavailable.
 		// Always check capture-pane for permission dialog detection,
 		// or as primary detection if agent detection is unavailable.
-		captured, captureErr := app.term.CapturePane(wsID, 200)
+		captured, captureErr := app.term.CaptureOutput(wsID, 200)
 		if captureErr != nil {
 			// Check if pane is still alive.
 			alive, aliveErr := app.term.IsPaneAlive(wsID)
 			if aliveErr != nil || !alive {
-				return fmt.Errorf("tmux session for %q died during dispatch", wsID)
+				return fmt.Errorf("agent session for %q died during dispatch", wsID)
 			}
 			if !usedAgentDetect {
 				// No agent detection and no capture — transient error, keep polling.
@@ -374,7 +374,7 @@ func runInteractiveWait(app *appContext, wsID, dispatchID string, timeout time.D
 
 		// If capture-pane succeeded, check for blocked/idle using agent-specific patterns.
 		if captureErr == nil {
-			lastActivity := app.term.PaneLastActivity(wsID)
+			lastActivity := app.term.LastActivity(wsID)
 			capState := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 15*time.Second)
 			if capState == dispatch.PaneBlocked {
 				state = dispatch.PaneBlocked

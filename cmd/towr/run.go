@@ -334,20 +334,18 @@ func runSpawnAndDispatch(app *appContext, plan *orchestrate.Plan, task *orchestr
 		startupKey := ag.StartupKey()
 
 		// Phase 1: launch agent.
-		_ = app.term.PasteBuffer(id, ag.LaunchCommand())
-		time.Sleep(500 * time.Millisecond)
-		_ = app.term.SendKeys(id, "Enter")
+		_ = app.term.SendInput(id, ag.LaunchCommand())
 
 		// Phase 2: wait for startup, handle trust dialogs.
 		for i := 0; i < 40; i++ {
 			time.Sleep(1500 * time.Millisecond)
-			captured, _ := app.term.CapturePane(id, 50)
+			captured, _ := app.term.CaptureOutput(id, 50)
 			if captured == "" {
 				continue
 			}
 			for _, p := range ag.StartupDialogs() {
 				if strings.Contains(captured, p) {
-					_ = app.term.SendKeys(id, startupKey)
+					_ = app.term.Approve(id, startupKey)
 					time.Sleep(1 * time.Second)
 					break
 				}
@@ -359,9 +357,7 @@ func runSpawnAndDispatch(app *appContext, plan *orchestrate.Plan, task *orchestr
 
 		// Phase 3: send prompt.
 		time.Sleep(500 * time.Millisecond)
-		_ = app.term.PasteBuffer(id, prompt)
-		time.Sleep(500 * time.Millisecond)
-		_ = app.term.SendKeys(id, "Enter")
+		_ = app.term.SendInput(id, prompt)
 
 		// Phase 4: keep approving dialogs every 3s until task completes.
 		for {
@@ -369,7 +365,7 @@ func runSpawnAndDispatch(app *appContext, plan *orchestrate.Plan, task *orchestr
 			if st.status == "completed" || st.status == "failed" {
 				return
 			}
-			captured, err := app.term.CapturePane(id, 200)
+			captured, err := app.term.CaptureOutput(id, 200)
 			if err != nil {
 				continue
 			}
@@ -382,7 +378,7 @@ func runSpawnAndDispatch(app *appContext, plan *orchestrate.Plan, task *orchestr
 					} else if strings.Contains(captured, "Trust this workspace") {
 						approveKey = "a"
 					}
-					_ = app.term.SendKeys(id, approveKey)
+					_ = app.term.Approve(id, approveKey)
 					fmt.Printf("[%s] ✓ %s: auto-approved\n", fmtTime(), id)
 					break
 				}
@@ -422,9 +418,9 @@ func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Tas
 
 	// Fallback to capture-pane.
 	if state == "" || state == dispatch.PaneEmpty {
-		captured, captErr := app.term.CapturePane(task.ID, 200)
+		captured, captErr := app.term.CaptureOutput(task.ID, 200)
 		if captErr == nil {
-			lastActivity := app.term.PaneLastActivity(task.ID)
+			lastActivity := app.term.LastActivity(task.ID)
 			state = dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 15*time.Second)
 			if summary == "" {
 				summary = truncate(dispatch.ExtractLastResponse(captured), 200)
@@ -549,19 +545,17 @@ func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Tas
 
 			go func() {
 				id := task.ID
-				_ = app.term.PasteBuffer(id, ag.LaunchCommand())
-				time.Sleep(500 * time.Millisecond)
-				_ = app.term.SendKeys(id, "Enter")
+				_ = app.term.SendInput(id, ag.LaunchCommand())
 
 				for i := 0; i < 40; i++ {
 					time.Sleep(1500 * time.Millisecond)
-					captured, _ := app.term.CapturePane(id, 50)
+					captured, _ := app.term.CaptureOutput(id, 50)
 					if captured == "" {
 						continue
 					}
 					for _, p := range ag.StartupDialogs() {
 						if strings.Contains(captured, p) {
-							_ = app.term.SendKeys(id, ag.StartupKey())
+							_ = app.term.Approve(id, ag.StartupKey())
 							time.Sleep(1 * time.Second)
 							break
 						}
@@ -572,16 +566,14 @@ func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Tas
 				}
 
 				time.Sleep(500 * time.Millisecond)
-				_ = app.term.PasteBuffer(id, prompt)
-				time.Sleep(500 * time.Millisecond)
-				_ = app.term.SendKeys(id, "Enter")
+				_ = app.term.SendInput(id, prompt)
 
 				for {
 					time.Sleep(3 * time.Second)
 					if st.status == "completed" || st.status == "failed" {
 						return
 					}
-					captured, err := app.term.CapturePane(id, 200)
+					captured, err := app.term.CaptureOutput(id, 200)
 					if err != nil {
 						continue
 					}
@@ -593,7 +585,7 @@ func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Tas
 							} else if strings.Contains(captured, "Trust this workspace") {
 								approveKey = "a"
 							}
-							_ = app.term.SendKeys(id, approveKey)
+							_ = app.term.Approve(id, approveKey)
 							fmt.Printf("[%s] ✓ %s: auto-approved\n", fmtTime(), id)
 							break
 						}
@@ -620,7 +612,7 @@ func runAutoApprove(app *appContext, plan *orchestrate.Plan, states map[string]*
 			continue
 		}
 
-		captured, err := app.term.CapturePane(task.ID, 200)
+		captured, err := app.term.CaptureOutput(task.ID, 200)
 		if err != nil {
 			continue
 		}
@@ -635,7 +627,7 @@ func runAutoApprove(app *appContext, plan *orchestrate.Plan, states map[string]*
 			agentType = plan.Settings.DefaultAgent
 		}
 		ag := agent.GetWithOpts(model, agentType, plan.Settings.FullAuto)
-		lastActivity := app.term.PaneLastActivity(task.ID)
+		lastActivity := app.term.LastActivity(task.ID)
 		state := dispatch.DetectPaneStateWithPatterns(captured, ag.DialogIndicators(), ag.IdlePattern(), lastActivity, 5*time.Second)
 
 		if state == dispatch.PaneBlocked {
@@ -647,7 +639,7 @@ func runAutoApprove(app *appContext, plan *orchestrate.Plan, states map[string]*
 				approveKey = "a"
 			}
 
-			if err := app.term.SendKeys(task.ID, approveKey); err == nil {
+			if err := app.term.Approve(task.ID, approveKey); err == nil {
 				fmt.Printf("[%s] ✓ %s: auto-approved\n", fmtTime(), task.ID)
 				_ = app.store.EmitEvent(store.Event{
 					ID: uuid.New().String(), Kind: "task.approved",

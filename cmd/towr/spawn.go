@@ -268,12 +268,7 @@ func spawnNonRepo(cmd *cobra.Command, task, wsID, dirPath string, jsonFlag *bool
 	}
 
 	// Create tmux session if available.
-	var term terminal.Backend
-	if _, lookupErr := lookupTmux(); lookupErr != nil {
-		term = terminal.NewHeadlessBackend()
-	} else {
-		term = terminal.NewTmuxBackend("towr")
-	}
+	term := terminal.NewBackend()
 
 	if !term.IsHeadless() {
 		if err := term.CreatePane(wsID, absPath, ""); err != nil {

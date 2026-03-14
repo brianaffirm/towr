@@ -8,34 +8,6 @@ import (
 	"time"
 )
 
-// PasteBuffer loads content into a tmux paste buffer and sends it to the workspace's chat window.
-func (t *TmuxBackend) PasteBuffer(id, content string) error {
-	target := t.sessionName(id)
-	tmpFile, err := os.CreateTemp("", "towr-paste-*.sh")
-	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-	if _, err := tmpFile.WriteString(content); err != nil {
-		tmpFile.Close()
-		return fmt.Errorf("write temp file: %w", err)
-	}
-	tmpFile.Close()
-	if err := t.tmuxRun("load-buffer", "-b", "towr-dispatch", tmpFile.Name()); err != nil {
-		return fmt.Errorf("load-buffer: %w", err)
-	}
-	if err := t.tmuxRun("paste-buffer", "-b", "towr-dispatch", "-t", target+":chat"); err != nil {
-		return fmt.Errorf("paste-buffer: %w", err)
-	}
-	// Brief delay to let Claude's UI process the pasted text before sending Enter.
-	// Without this, Enter can arrive before the UI registers the paste content.
-	time.Sleep(500 * time.Millisecond)
-	if err := t.tmuxRun("send-keys", "-t", target+":chat", "C-m"); err != nil {
-		return fmt.Errorf("send enter: %w", err)
-	}
-	return nil
-}
-
 // TmuxBackend implements Backend using tmux.
 // Each workspace gets its own tmux session named Prefix/<id>.
 type TmuxBackend struct {
@@ -173,8 +145,45 @@ func (t *TmuxBackend) IsPaneAlive(id string) (bool, error) {
 	return true, nil
 }
 
-// CapturePane captures the last N lines from the workspace's chat window.
-func (t *TmuxBackend) CapturePane(id string, lines int) (string, error) {
+// SendInput loads content into a tmux paste buffer, pastes it, and sends Enter.
+func (t *TmuxBackend) SendInput(id, content string) error {
+	target := t.sessionName(id)
+	tmpFile, err := os.CreateTemp("", "towr-paste-*.sh")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.WriteString(content); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	tmpFile.Close()
+	if err := t.tmuxRun("load-buffer", "-b", "towr-dispatch", tmpFile.Name()); err != nil {
+		return fmt.Errorf("load-buffer: %w", err)
+	}
+	if err := t.tmuxRun("paste-buffer", "-b", "towr-dispatch", "-t", target+":chat"); err != nil {
+		return fmt.Errorf("paste-buffer: %w", err)
+	}
+	// Brief delay to let the UI process the pasted text before sending Enter.
+	time.Sleep(500 * time.Millisecond)
+	if err := t.tmuxRun("send-keys", "-t", target+":chat", "C-m"); err != nil {
+		return fmt.Errorf("send enter: %w", err)
+	}
+	return nil
+}
+
+// Interrupt sends Ctrl-C to the workspace's tmux session.
+func (t *TmuxBackend) Interrupt(id string) error {
+	return t.SendKeys(id, "C-c")
+}
+
+// Approve sends the given key to the workspace's tmux session to accept a dialog.
+func (t *TmuxBackend) Approve(id, key string) error {
+	return t.SendKeys(id, key)
+}
+
+// CaptureOutput captures the last N lines from the workspace's chat window.
+func (t *TmuxBackend) CaptureOutput(id string, lines int) (string, error) {
 	session := t.sessionName(id)
 	cmd := exec.Command("tmux", "capture-pane", "-t", session+":chat", "-p", "-S", fmt.Sprintf("-%d", lines))
 	out, err := cmd.CombinedOutput()
@@ -184,8 +193,8 @@ func (t *TmuxBackend) CapturePane(id string, lines int) (string, error) {
 	return string(out), nil
 }
 
-// PaneLastActivity returns the time of the last output in the pane.
-func (t *TmuxBackend) PaneLastActivity(id string) time.Time {
+// LastActivity returns the time of the last output in the pane.
+func (t *TmuxBackend) LastActivity(id string) time.Time {
 	session := t.sessionName(id)
 	cmd := exec.Command("tmux", "list-panes", "-t", session+":chat", "-F", "#{window_activity}")
 	out, err := cmd.CombinedOutput()
@@ -207,7 +216,9 @@ func (t *TmuxBackend) IsHeadless() bool {
 	return false
 }
 
-// SendKeys sends keystrokes to the workspace's tmux session.
+// SendKeys sends raw keystrokes to the workspace's tmux session.
+// This is a tmux-specific operation used by preview.go and other
+// tmux-aware features. Prefer Approve or Interrupt for interface-level use.
 func (t *TmuxBackend) SendKeys(id, keys string) error {
 	session := t.sessionName(id)
 	cmd := exec.Command("tmux", "send-keys", "-t", session, keys, "")

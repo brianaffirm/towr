@@ -108,7 +108,7 @@ func (r *appRuntime) SpawnWorkspace(id, task, agentType string) error {
 	if !r.app.term.IsHeadless() {
 		if err := r.app.term.CreatePane(ws.ID, ws.WorktreePath, ""); err != nil {
 			// Non-fatal: log and continue.
-			fmt.Fprintf(os.Stderr, "Warning: could not create tmux pane for %s: %v\n", id, err)
+			fmt.Fprintf(os.Stderr, "Warning: could not create agent session for %s: %v\n", id, err)
 		}
 	}
 
@@ -128,10 +128,10 @@ func (r *appRuntime) DispatchPrompt(wsID, prompt string) (string, error) {
 	// Check tmux session alive.
 	alive, err := r.app.term.IsPaneAlive(wsID)
 	if err != nil {
-		return "", fmt.Errorf("check tmux session: %w", err)
+		return "", fmt.Errorf("check agent session: %w", err)
 	}
 	if !alive {
-		return "", fmt.Errorf("tmux session for workspace %q is not running", wsID)
+		return "", fmt.Errorf("agent session for workspace %q is not running", wsID)
 	}
 
 	// Generate dispatch ID.
@@ -179,7 +179,7 @@ func (r *appRuntime) DispatchPrompt(wsID, prompt string) (string, error) {
 	}
 
 	// Check if Claude is already running (idle prompt visible).
-	captured, err := r.app.term.CapturePane(wsID, 50)
+	captured, err := r.app.term.CaptureOutput(wsID, 50)
 	if err != nil {
 		return "", fmt.Errorf("capture pane: %w", err)
 	}
@@ -195,7 +195,7 @@ func (r *appRuntime) DispatchPrompt(wsID, prompt string) (string, error) {
 			return "", fmt.Errorf("acquire launch lock: %w", err)
 		}
 
-		if err := r.app.term.PasteBuffer(wsID, ag.LaunchCommand()); err != nil {
+		if err := r.app.term.SendInput(wsID, ag.LaunchCommand()); err != nil {
 			unlock()
 			return "", fmt.Errorf("launch %s: %w", ag.Name(), err)
 		}
@@ -205,14 +205,14 @@ func (r *appRuntime) DispatchPrompt(wsID, prompt string) (string, error) {
 		started := false
 		for i := 0; i < 40; i++ {
 			time.Sleep(1500 * time.Millisecond)
-			captured, err = r.app.term.CapturePane(wsID, 50)
+			captured, err = r.app.term.CaptureOutput(wsID, 50)
 			if err != nil {
 				continue
 			}
 			dismissed := false
 			for _, pattern := range startupDialogs {
 				if strings.Contains(captured, pattern) {
-					_ = r.app.term.SendKeys(wsID, "Enter")
+					_ = r.app.term.Approve(wsID, ag.StartupKey())
 					time.Sleep(1 * time.Second)
 					dismissed = true
 					break
@@ -233,7 +233,7 @@ func (r *appRuntime) DispatchPrompt(wsID, prompt string) (string, error) {
 	}
 
 	// Send the prompt.
-	if err := r.app.term.PasteBuffer(wsID, prompt); err != nil {
+	if err := r.app.term.SendInput(wsID, prompt); err != nil {
 		return "", fmt.Errorf("send prompt: %w", err)
 	}
 
@@ -281,9 +281,9 @@ func (r *appRuntime) DetectState(wsID string) (string, string, error) {
 
 	// Check capture-pane for blocked detection or as fallback.
 	// Use activity timestamp for more reliable idle detection.
-	captured, captErr := r.app.term.CapturePane(wsID, 200)
+	captured, captErr := r.app.term.CaptureOutput(wsID, 200)
 	if captErr == nil {
-		lastActivity := r.app.term.PaneLastActivity(wsID)
+		lastActivity := r.app.term.LastActivity(wsID)
 		capState := dispatch.DetectPaneStateWithActivity(captured, lastActivity, 15*time.Second)
 		if capState == dispatch.PaneBlocked {
 			state = dispatch.PaneBlocked
@@ -303,7 +303,7 @@ func (r *appRuntime) DetectState(wsID string) (string, string, error) {
 }
 
 func (r *appRuntime) SendApprove(wsID string) error {
-	return r.app.term.SendKeys(wsID, "Enter")
+	return r.app.term.Approve(wsID, "Enter")
 }
 
 func (r *appRuntime) GetWorktreePath(wsID string) string {
