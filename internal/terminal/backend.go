@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"os"
 	"os/exec"
 	"time"
 )
@@ -42,10 +43,20 @@ type Backend interface {
 	IsHeadless() bool
 }
 
-// NewBackend returns a Backend: TmuxBackend if tmux is installed, HeadlessBackend otherwise.
+// NewBackend returns a Backend based on the TOWR_BACKEND env var:
+//   - "process": ProcessBackend (subprocess with stdin/stdout pipes)
+//   - "headless": HeadlessBackend (stub, no-op)
+//   - "tmux" or unset: TmuxBackend if tmux is installed, HeadlessBackend otherwise
 func NewBackend() Backend {
-	if _, err := exec.LookPath("tmux"); err != nil {
+	switch os.Getenv("TOWR_BACKEND") {
+	case "process":
+		return NewProcessBackend()
+	case "headless":
 		return NewHeadlessBackend()
+	default:
+		if _, err := exec.LookPath("tmux"); err != nil {
+			return NewHeadlessBackend()
+		}
+		return NewTmuxBackend("towr")
 	}
-	return NewTmuxBackend("towr")
 }
