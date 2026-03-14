@@ -478,10 +478,16 @@ func runCheckTask(app *appContext, plan *orchestrate.Plan, task *orchestrate.Tas
 
 		// Emit cost event.
 		var usage cost.TokenUsage
-		if sw.WorktreePath != "" && (sw.AgentRuntime == "" || sw.AgentRuntime == "claude-code") {
+		switch {
+		case sw.WorktreePath != "" && (sw.AgentRuntime == "" || sw.AgentRuntime == "claude-code"):
 			usage, _ = cost.ParseClaudeTokens(sw.WorktreePath)
-		} else {
+		case sw.WorktreePath != "" && sw.AgentRuntime == "codex":
+			usage, _ = cost.ParseCodexTokens(sw.WorktreePath)
+		default:
 			usage = cost.EstimateTokens(task.Prompt)
+			if sw.AgentRuntime != "" {
+				usage.Source = sw.AgentRuntime + "-estimated"
+			}
 		}
 		actualCost := cost.Calculate(st.decision.Model, usage)
 		opusCost := cost.Calculate("opus", usage)
