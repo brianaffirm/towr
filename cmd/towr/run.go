@@ -12,6 +12,7 @@ import (
 	"github.com/brianaffirm/towr/internal/agent"
 	"github.com/brianaffirm/towr/internal/cost"
 	"github.com/brianaffirm/towr/internal/dispatch"
+	"github.com/brianaffirm/towr/internal/mux"
 	"github.com/brianaffirm/towr/internal/orchestrate"
 	"github.com/brianaffirm/towr/internal/router"
 	"github.com/brianaffirm/towr/internal/store"
@@ -164,6 +165,18 @@ func runPlan(app *appContext, plan *orchestrate.Plan, jsonFlag *bool, quiet bool
 		name = "plan"
 	}
 	fmt.Printf("[%s] Running %q — %d tasks\n", fmtTime(), name, len(plan.Tasks))
+
+	// If a mux session is active, start a goroutine to keep the status bar updated.
+	muxActive := mux.SessionExists(mux.DefaultSessionName)
+	if muxActive {
+		go func() {
+			statusTicker := time.NewTicker(5 * time.Second)
+			defer statusTicker.Stop()
+			for range statusTicker.C {
+				_ = mux.UpdateStatusBar(mux.DefaultSessionName)
+			}
+		}()
+	}
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()

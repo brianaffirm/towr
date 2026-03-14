@@ -317,6 +317,116 @@ func TestColorStatus(t *testing.T) {
 	}
 }
 
+func TestNarrowThreshold(t *testing.T) {
+	if narrowThreshold != 60 {
+		t.Errorf("narrowThreshold = %d, want 60", narrowThreshold)
+	}
+}
+
+func TestRenderNarrowDashboard(t *testing.T) {
+	m := DashboardModel{
+		repoRoot: "/tmp/myrepo",
+		workspaces: []WorkspaceRow{
+			{ID: "auth", Status: "active", Branch: "towr/auth", Added: 10, Removed: 3, Agent: "claude-code"},
+			{ID: "billing", Status: "ready", Branch: "towr/billing", Added: 5, Removed: 1},
+		},
+		cursor: 0,
+		view:   viewDashboard,
+		width:  35, // narrow mode
+		height: 20,
+	}
+	output := m.View()
+	if output == "" {
+		t.Error("expected non-empty narrow dashboard output")
+	}
+	// Should contain workspace IDs.
+	if !containsStr(output, "auth") {
+		t.Error("narrow output should contain 'auth'")
+	}
+	if !containsStr(output, "billing") {
+		t.Error("narrow output should contain 'billing'")
+	}
+	// Should NOT contain full column headers (narrow mode is compact).
+	if containsStr(output, "ACTIVITY") {
+		t.Error("narrow output should not contain full column headers like ACTIVITY")
+	}
+}
+
+func TestRenderNarrowDashboardEmpty(t *testing.T) {
+	m := DashboardModel{
+		repoRoot: "/tmp/myrepo",
+		width:    35,
+		height:   20,
+	}
+	output := m.View()
+	if !containsStr(output, "(none)") {
+		t.Error("narrow empty dashboard should show '(none)'")
+	}
+}
+
+func TestRenderWideDashboardAboveThreshold(t *testing.T) {
+	m := DashboardModel{
+		repoRoot: "/tmp/myrepo",
+		workspaces: []WorkspaceRow{
+			{ID: "auth", Status: "active", Branch: "towr/auth"},
+		},
+		cursor: 0,
+		view:   viewDashboard,
+		width:  120, // wide mode
+		height: 30,
+	}
+	output := m.View()
+	// Wide mode should have column headers.
+	if !containsStr(output, "STATUS") {
+		t.Error("wide output should contain column header 'STATUS'")
+	}
+}
+
+func TestStatusIcon(t *testing.T) {
+	tests := []struct {
+		status string
+		merged bool
+		want   string
+	}{
+		{"active", false, "A"},
+		{"ready", false, "R"},
+		{"blocked", false, "B"},
+		{"completed", false, "D"},
+		{"stale", false, "S"},
+		{"unknown", false, "?"},
+		{"active", true, "M"},
+	}
+	for _, tt := range tests {
+		got := stripAnsi(statusIcon(tt.status, tt.merged))
+		if got != tt.want {
+			t.Errorf("statusIcon(%q, %v) = %q, want %q", tt.status, tt.merged, got, tt.want)
+		}
+	}
+}
+
+func TestNarrowStatus(t *testing.T) {
+	// With task status.
+	ws := WorkspaceRow{TaskStatus: "d-0001 ▶", Activity: "5m"}
+	got := narrowStatus(ws)
+	if got != "d-0001 ▶" {
+		t.Errorf("narrowStatus with task = %q, want 'd-0001 ▶'", got)
+	}
+
+	// Without task status, with activity.
+	ws2 := WorkspaceRow{Activity: "5m"}
+	got2 := stripAnsi(narrowStatus(ws2))
+	if got2 != "5m" {
+		t.Errorf("narrowStatus with activity = %q, want '5m'", got2)
+	}
+
+	// No status or activity.
+	ws3 := WorkspaceRow{}
+	got3 := narrowStatus(ws3)
+	if got3 != "" {
+		t.Errorf("narrowStatus empty = %q, want empty", got3)
+	}
+}
+
 func containsStr(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsSubstring(s, sub))
 }

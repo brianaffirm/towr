@@ -743,7 +743,122 @@ func (m DashboardModel) renderConfirmCleanup() string {
 	return b.String()
 }
 
+// narrowThreshold is the width below which the dashboard switches to
+// narrow/compact mode, suitable for the mux control pane (~30-50 cols).
+const narrowThreshold = 60
+
 func (m DashboardModel) renderDashboard() string {
+	if m.width > 0 && m.width < narrowThreshold {
+		return m.renderNarrowDashboard()
+	}
+	return m.renderWideDashboard()
+}
+
+// renderNarrowDashboard renders a compact single-column layout for the mux
+// control pane (~30-50 columns wide). Shows one workspace per row: status
+// icon, truncated ID, key metric.
+func (m DashboardModel) renderNarrowDashboard() string {
+	var b strings.Builder
+	maxW := m.width
+	if maxW <= 0 {
+		maxW = 40
+	}
+
+	// Compact header.
+	title := fmt.Sprintf(" towr %d ws", len(m.workspaces))
+	b.WriteString(headerStyle.Render(title))
+	b.WriteString("\n")
+
+	if len(m.workspaces) == 0 {
+		b.WriteString(dimStyle.Render(" (none)"))
+		b.WriteString("\n")
+	} else {
+		for i, ws := range m.workspaces {
+			prefix := " "
+			if i == m.cursor {
+				prefix = ">"
+			}
+
+			// Status icon.
+			icon := statusIcon(ws.Status, ws.Merged)
+
+			// Truncate ID to fit.
+			idMaxLen := maxW - 12 // icon(2) + prefix(1) + space(1) + status(~6) + padding
+			if idMaxLen < 6 {
+				idMaxLen = 6
+			}
+			id := truncate(ws.ID, idMaxLen)
+
+			// Compact status suffix.
+			suffix := narrowStatus(ws)
+
+			line := fmt.Sprintf("%s%s %s %s", prefix, icon, id, suffix)
+			if len(stripAnsi(line)) > maxW {
+				line = line[:maxW]
+			}
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+
+	// Compact footer for selected workspace.
+	if len(m.workspaces) > 0 && m.cursor < len(m.workspaces) {
+		ws := m.workspaces[m.cursor]
+		sepW := maxW - 2
+		if sepW < 0 {
+			sepW = 0
+		}
+		b.WriteString(dimStyle.Render(strings.Repeat("─", sepW)))
+		b.WriteString("\n")
+		// Second line: diff + tree.
+		detail := fmt.Sprintf(" %s/%s", diffAdded.Render(fmt.Sprintf("+%d", ws.Added)), diffRemoved.Render(fmt.Sprintf("-%d", ws.Removed)))
+		if ws.Agent != "" {
+			detail += " " + dimStyle.Render(truncate(ws.Agent, 8))
+		}
+		b.WriteString(detail)
+		b.WriteString("\n")
+	}
+
+	// Compact help.
+	b.WriteString(footerStyle.Render(" j/k s l q"))
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+// statusIcon returns a compact status icon for narrow mode.
+func statusIcon(status string, merged bool) string {
+	if merged {
+		return mergedStyle.Render("M")
+	}
+	switch status {
+	case "active":
+		return statusRunning.Render("A")
+	case "ready":
+		return statusReady.Render("R")
+	case "blocked":
+		return statusBlocked.Render("B")
+	case "completed":
+		return statusReady.Render("D")
+	case "stale":
+		return dimStyle.Render("S")
+	default:
+		return dimStyle.Render("?")
+	}
+}
+
+// narrowStatus returns a compact status string for narrow mode.
+func narrowStatus(ws WorkspaceRow) string {
+	if ws.TaskStatus != "" {
+		return ws.TaskStatus
+	}
+	if ws.Activity != "" && ws.Activity != "-" {
+		return dimStyle.Render(ws.Activity)
+	}
+	return ""
+}
+
+func (m DashboardModel) renderWideDashboard() string {
 	var b strings.Builder
 
 	// Header.

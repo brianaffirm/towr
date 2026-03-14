@@ -142,13 +142,14 @@ func TestMuxSessionKeybindings(t *testing.T) {
 
 	cmds := BuildKeybindingCommands(cfg)
 
-	// Should have bindings for: Right, Left, Enter, t, w, q
+	// Should have bindings for: Right, Left, Enter, t, w (choose-tree), x (kill-pane), q
 	expectedKeys := map[string]bool{
 		"Right": false,
 		"Left":  false,
 		"Enter": false,
 		"t":     false,
 		"w":     false,
+		"x":     false,
 		"q":     false,
 	}
 
@@ -242,6 +243,56 @@ func TestBuildStatusBarCommands(t *testing.T) {
 	if !found {
 		t.Error("should set status-left")
 	}
+}
+
+func TestDefaultSessionName(t *testing.T) {
+	if DefaultSessionName != "towr-mux" {
+		t.Errorf("DefaultSessionName = %q, want %q", DefaultSessionName, "towr-mux")
+	}
+}
+
+func TestCountMuxPanesNoSession(t *testing.T) {
+	// Counting panes on a non-existent session should return 0.
+	count := CountMuxPanes("nonexistent-session-abc123")
+	if count != 0 {
+		t.Errorf("CountMuxPanes on nonexistent session = %d, want 0", count)
+	}
+}
+
+func TestBuildStatusBarCommandsContent(t *testing.T) {
+	cfg := MuxConfig{SessionName: "test-session"}
+	cmds := BuildStatusBarCommands(cfg, 5, 3, "worker-1")
+
+	// Verify left status contains expected values.
+	for _, c := range cmds {
+		for i, arg := range c.Args {
+			if arg == "status-left" && i+1 < len(c.Args) {
+				left := c.Args[i+1]
+				if !contains(left, "5 panes") {
+					t.Errorf("status-left should contain '5 panes', got %q", left)
+				}
+				if !contains(left, "3 running") {
+					t.Errorf("status-left should contain '3 running', got %q", left)
+				}
+				if !contains(left, "worker-1") {
+					t.Errorf("status-left should contain focus name 'worker-1', got %q", left)
+				}
+			}
+		}
+	}
+}
+
+func contains(s, sub string) bool {
+	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsHelper(s, sub))
+}
+
+func containsHelper(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildCreateCommandsWorkDir(t *testing.T) {

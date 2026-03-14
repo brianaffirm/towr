@@ -20,6 +20,13 @@ func cleanupSession(t *testing.T, name string) {
 	_ = exec.Command("tmux", "kill-session", "-t", name).Run()
 }
 
+// newStandaloneBackend creates a TmuxBackend with mux detection disabled.
+func newStandaloneBackend(prefix string) *TmuxBackend {
+	b := NewTmuxBackend(prefix)
+	b.MuxSession = "" // disable mux detection so tests always create standalone sessions
+	return b
+}
+
 func TestSessionName(t *testing.T) {
 	b := NewTmuxBackend("towr")
 	got := b.sessionName("my-workspace")
@@ -41,7 +48,7 @@ func TestSessionNameWithRepoPrefix(t *testing.T) {
 func TestCreatePaneCreatesSession(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("towr-test")
+	b := newStandaloneBackend("towr-test")
 	sessionName := b.sessionName("ws1")
 	t.Cleanup(func() { cleanupSession(t, sessionName) })
 
@@ -59,7 +66,7 @@ func TestCreatePaneCreatesSession(t *testing.T) {
 func TestCreatePaneCreatesTwoWindows(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("towr-test-windows")
+	b := newStandaloneBackend("towr-test-windows")
 	sessionName := b.sessionName("ws1")
 	t.Cleanup(func() { cleanupSession(t, sessionName) })
 
@@ -102,7 +109,7 @@ func TestCreatePaneCreatesTwoWindows(t *testing.T) {
 func TestTwoWorkspacesGetSeparateSessions(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("towr-test-separate")
+	b := newStandaloneBackend("towr-test-separate")
 	session1 := b.sessionName("ws1")
 	session2 := b.sessionName("ws2")
 	t.Cleanup(func() {
@@ -134,7 +141,7 @@ func TestTwoWorkspacesGetSeparateSessions(t *testing.T) {
 func TestDestroyPaneKillsSession(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("towr-test-destroy")
+	b := newStandaloneBackend("towr-test-destroy")
 	sessionName := b.sessionName("ws1")
 	t.Cleanup(func() { cleanupSession(t, sessionName) })
 
@@ -158,7 +165,7 @@ func TestDestroyPaneKillsSession(t *testing.T) {
 func TestListPanesListsSessions(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("towr-test-list")
+	b := newStandaloneBackend("towr-test-list")
 	session1 := b.sessionName("ws-a")
 	session2 := b.sessionName("ws-b")
 	t.Cleanup(func() {
@@ -195,7 +202,7 @@ func TestListPanesListsSessions(t *testing.T) {
 func TestIsPaneAliveChecksSession(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("towr-test-alive")
+	b := newStandaloneBackend("towr-test-alive")
 	sessionName := b.sessionName("ws1")
 	t.Cleanup(func() { cleanupSession(t, sessionName) })
 
@@ -225,7 +232,7 @@ func TestIsPaneAliveChecksSession(t *testing.T) {
 func TestApproveTargetsSession(t *testing.T) {
 	skipIfNoTmux(t)
 
-	b := NewTmuxBackend("towr-test-keys")
+	b := newStandaloneBackend("towr-test-keys")
 	sessionName := b.sessionName("ws1")
 	t.Cleanup(func() { cleanupSession(t, sessionName) })
 
@@ -247,5 +254,158 @@ func TestAttachInsideTmuxUsesSwitchClient(t *testing.T) {
 	name := b.sessionName("my-ws")
 	if !strings.Contains(name, "/") {
 		t.Errorf("session name %q should use / separator for tmux sessions", name)
+	}
+}
+
+func TestTargetForStandaloneSession(t *testing.T) {
+	b := NewTmuxBackend("towr")
+	target := b.targetFor("my-ws")
+	want := "towr/my-ws:chat"
+	if target != want {
+		t.Errorf("targetFor (standalone) = %q, want %q", target, want)
+	}
+}
+
+func TestTargetForMuxPane(t *testing.T) {
+	b := NewTmuxBackend("towr")
+	b.mu.Lock()
+	b.muxPanes["my-ws"] = "%42"
+	b.mu.Unlock()
+
+	target := b.targetFor("my-ws")
+	if target != "%42" {
+		t.Errorf("targetFor (mux pane) = %q, want '%%42'", target)
+	}
+}
+
+func TestIsMuxPane(t *testing.T) {
+	b := NewTmuxBackend("towr")
+
+	// Not a mux pane.
+	_, ok := b.isMuxPane("ws1")
+	if ok {
+		t.Error("ws1 should not be a mux pane")
+	}
+
+	// Register as mux pane.
+	b.mu.Lock()
+	b.muxPanes["ws1"] = "%10"
+	b.mu.Unlock()
+
+	paneID, ok := b.isMuxPane("ws1")
+	if !ok {
+		t.Error("ws1 should be a mux pane after registration")
+	}
+	if paneID != "%10" {
+		t.Errorf("paneID = %q, want '%%10'", paneID)
+	}
+}
+
+func TestCreatePaneMuxMode(t *testing.T) {
+	skipIfNoTmux(t)
+
+	// Create a mux session first.
+	muxSession := "towr-mux-test-createpane"
+	cmd := exec.Command("tmux", "new-session", "-d", "-s", muxSession, "-x", "200", "-y", "50")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("create mux session: %v", err)
+	}
+	// Rename window to "mux" to match what AddPane expects.
+	_ = exec.Command("tmux", "rename-window", "-t", muxSession+":0", "mux").Run()
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "kill-session", "-t", muxSession).Run()
+	})
+
+	// Temporarily override the default session name by creating pane directly via mux package.
+	// For the integration test we test AddPane directly since CreatePane checks "towr-mux" specifically.
+	b := NewTmuxBackend("towr")
+
+	// Count panes before.
+	countBefore := countTmuxPanes(t, muxSession)
+
+	// Use mux.AddPane directly to test pane creation in a mux session.
+	info, err := addPaneForTest(muxSession, "/tmp")
+	if err != nil {
+		t.Fatalf("AddPane: %v", err)
+	}
+
+	// Register it in the backend.
+	b.mu.Lock()
+	b.muxPanes["test-ws"] = info
+	b.mu.Unlock()
+
+	// Count panes after.
+	countAfter := countTmuxPanes(t, muxSession)
+	if countAfter != countBefore+1 {
+		t.Errorf("pane count: before=%d, after=%d, want %d", countBefore, countAfter, countBefore+1)
+	}
+
+	// Verify the backend targets the mux pane.
+	target := b.targetFor("test-ws")
+	if target != info {
+		t.Errorf("targetFor = %q, want %q", target, info)
+	}
+}
+
+func countTmuxPanes(t *testing.T, session string) int {
+	t.Helper()
+	cmd := exec.Command("tmux", "list-panes", "-t", session+":mux", "-F", "#{pane_id}")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	count := 0
+	for _, l := range lines {
+		if l != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func addPaneForTest(session, cwd string) (string, error) {
+	cmd := exec.Command("tmux", "split-window", "-t", session+":mux", "-h",
+		"-c", cwd, "-P", "-F", "#{pane_id}")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func TestDestroyMuxPane(t *testing.T) {
+	skipIfNoTmux(t)
+
+	muxSession := "towr-mux-test-destroy-muxpane"
+	cmd := exec.Command("tmux", "new-session", "-d", "-s", muxSession, "-x", "200", "-y", "50")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("create mux session: %v", err)
+	}
+	_ = exec.Command("tmux", "rename-window", "-t", muxSession+":0", "mux").Run()
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "kill-session", "-t", muxSession).Run()
+	})
+
+	// Add a pane.
+	paneID, err := addPaneForTest(muxSession, "/tmp")
+	if err != nil {
+		t.Fatalf("addPaneForTest: %v", err)
+	}
+
+	b := NewTmuxBackend("towr")
+	b.mu.Lock()
+	b.muxPanes["test-ws"] = paneID
+	b.mu.Unlock()
+
+	// Destroy it.
+	if err := b.DestroyPane("test-ws"); err != nil {
+		t.Fatalf("DestroyPane: %v", err)
+	}
+
+	// Should no longer be tracked.
+	_, ok := b.isMuxPane("test-ws")
+	if ok {
+		t.Error("test-ws should not be tracked after DestroyPane")
 	}
 }

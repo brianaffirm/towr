@@ -125,9 +125,14 @@ func BuildKeybindingCommands(cfg MuxConfig) []TmuxCmd {
 		"bind", "t", "if-shell", guard, "split-window -h -c " + cfg.WorkDir, "clock-mode",
 	}})
 
-	// Close pane.
+	// Session/window picker (matches tmux Ctrl-b w convention).
 	cmds = append(cmds, TmuxCmd{Args: []string{
-		"bind", "w", "if-shell", guard, "kill-pane", "choose-window",
+		"bind", "w", "if-shell", guard, "choose-tree -s", "choose-window",
+	}})
+
+	// Close pane (matches tmux Ctrl-b x convention).
+	cmds = append(cmds, TmuxCmd{Args: []string{
+		"bind", "x", "if-shell", guard, "kill-pane", "confirm-before kill-pane",
 	}})
 
 	// Quit all.
@@ -168,6 +173,79 @@ func RunTmuxCmds(cmds []TmuxCmd) error {
 func SessionExists(name string) bool {
 	cmd := exec.Command("tmux", "has-session", "-t", name)
 	return cmd.Run() == nil
+}
+
+// DefaultSessionName is the standard mux session name.
+const DefaultSessionName = "towr-mux"
+
+// MuxPaneInfo describes a pane created inside the mux window.
+type MuxPaneInfo struct {
+	PaneID string // tmux pane ID (e.g., "%5") — globally unique
+	Index  int    // pane index within the mux window
+}
+
+// AddPane creates a new pane inside the mux window via split-window.
+// Returns the tmux pane ID for the new pane. The pane runs a shell in cwd.
+func AddPane(session, cwd string) (MuxPaneInfo, error) {
+	// Split horizontally from the last pane in the mux window.
+	cmd := exec.Command("tmux", "split-window", "-t", session+":mux", "-h",
+		"-c", cwd, "-P", "-F", "#{pane_id}\t#{pane_index}")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return MuxPaneInfo{}, fmt.Errorf("tmux split-window: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	parts := strings.SplitN(strings.TrimSpace(string(out)), "\t", 2)
+	info := MuxPaneInfo{PaneID: parts[0]}
+	if len(parts) > 1 {
+		fmt.Sscanf(parts[1], "%d", &info.Index)
+	}
+	return info, nil
+}
+
+// RemovePane kills a pane in the mux window by its tmux pane ID.
+func RemovePane(paneID string) error {
+	cmd := exec.Command("tmux", "kill-pane", "-t", paneID)
+	_ = cmd.Run() // best-effort
+	return nil
+}
+
+// CountMuxPanes returns the number of panes in the mux window.
+func CountMuxPanes(session string) int {
+	cmd := exec.Command("tmux", "list-panes", "-t", session+":mux", "-F", "#{pane_id}")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	count := 0
+	for _, l := range lines {
+		if l != "" {
+			count++
+		}
+	}
+	return count
+}
+
+// UpdateStatusBar queries current mux state and updates the tmux status bar.
+func UpdateStatusBar(session string) error {
+	paneCount := CountMuxPanes(session)
+
+	// Get focused pane title.
+	cmd := exec.Command("tmux", "display-message", "-t", session+":mux", "-p", "#{pane_title}")
+	out, _ := cmd.CombinedOutput()
+	focusName := strings.TrimSpace(string(out))
+	if focusName == "" {
+		focusName = "shell"
+	}
+
+	// Count running — pane_count minus control (pane 0).
+	running := paneCount - 1
+	if running < 0 {
+		running = 0
+	}
+
+	cmds := BuildStatusBarCommands(MuxConfig{SessionName: session}, paneCount, running, focusName)
+	return RunTmuxCmds(cmds)
 }
 
 // AttachSession attaches to an existing mux session.
