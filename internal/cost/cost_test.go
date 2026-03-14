@@ -183,3 +183,49 @@ func TestFormatDuration(t *testing.T) {
 		}
 	}
 }
+
+func TestParseCodexTokens(t *testing.T) {
+	dir := t.TempDir()
+	old := dispatch.GetCodexSessionsDirOverride()
+	dispatch.SetCodexSessionsDirOverride(dir)
+	t.Cleanup(func() { dispatch.SetCodexSessionsDirOverride(old) })
+
+	worktreePath := "/Users/test/.towr/worktrees/towr/codex-task"
+
+	dateDir := filepath.Join(dir, "2026", "03", "13")
+	if err := os.MkdirAll(dateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("parses last token_count event", func(t *testing.T) {
+		sessionFile := filepath.Join(dateDir, "rollout-abc.jsonl")
+		content := "{\"type\":\"session_meta\",\"payload\":{\"cwd\":\"/Users/test/.towr/worktrees/towr/codex-task\"}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":5000,\"output_tokens\":200,\"total_tokens\":5200}}}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":8951,\"output_tokens\":285,\"total_tokens\":9236}}}}\n"
+		if err := os.WriteFile(sessionFile, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		usage, err := ParseCodexTokens(worktreePath)
+		if err != nil {
+			t.Fatalf("ParseCodexTokens: %v", err)
+		}
+		if usage.InputTokens != 8951 {
+			t.Errorf("input = %d, want 8951", usage.InputTokens)
+		}
+		if usage.OutputTokens != 285 {
+			t.Errorf("output = %d, want 285", usage.OutputTokens)
+		}
+		if usage.Source != "codex-jsonl" {
+			t.Errorf("source = %q, want codex-jsonl", usage.Source)
+		}
+	})
+
+	t.Run("returns unavailable when no session found", func(t *testing.T) {
+		usage, err := ParseCodexTokens("/nonexistent/worktree")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if usage.Source != "unavailable" {
+			t.Errorf("source = %q, want unavailable", usage.Source)
+		}
+	})
+}
