@@ -432,10 +432,10 @@ func UpdateStatusBar(session string) error {
 		focusName = "shell"
 	}
 
-	// Count running — pane_count minus control (pane 0).
-	running := paneCount - 1
-	if running < 0 {
-		running = 0
+	// Agent count = total panes minus control (pane 0) and master (pane 1).
+	agentCount := paneCount - 2
+	if agentCount < 0 {
+		agentCount = 0
 	}
 
 	// Read enhanced data from session env if available.
@@ -455,8 +455,8 @@ func UpdateStatusBar(session string) error {
 
 	data := StatusBarData{
 		PlanName:       planName,
-		PaneCount:      paneCount,
-		RunningCount:   running,
+		PaneCount:      agentCount,
+		RunningCount:   agentCount,
 		CompletedCount: completed,
 		Cost:           costVal,
 		ElapsedMin:     elapsed,

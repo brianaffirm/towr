@@ -144,13 +144,14 @@ all arguments are joined into a single task prompt.`,
 			}()
 
 			handle, err := svc.Start(ctx, req)
-			startMuxStatusUpdater(plan.Name, handle, &controlRuntime{app: app, baseBranch: plan.Settings.BaseBranch}, plan.Tasks)
+			stopUpdater := startMuxStatusUpdater(plan.Name, handle, &controlRuntime{app: app, baseBranch: plan.Settings.BaseBranch}, plan.Tasks)
 			if handle != nil {
 				for handle.Status == control.RunRunning {
 					time.Sleep(100 * time.Millisecond)
 				}
 				fmt.Printf("\nRun %s: %s\n", handle.ID, handle.Status)
 			}
+			stopUpdater()
 			cleanupMuxEnv()
 			if err == nil && plan.Settings.ReactToReviews {
 				runWatchReact(app, parsePollInterval(plan))

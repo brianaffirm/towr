@@ -169,7 +169,7 @@ func (s *RunService) orchestrate(ctx context.Context, cancel context.CancelFunc,
 					s.Logger.Log("budget exhausted (%.2f >= %.2f), skipping %s", accCost, req.Options.Budget, task.ID)
 					st.status = RunFailed
 					close(st.doneCh)
-					handle.TaskStates[task.ID] = st.status
+					handle.SetTaskState(task.ID, st.status)
 					s.emitRunEvent(runID, req.RepoRoot, store.EventTaskFailed, map[string]interface{}{
 						"task_id": task.ID,
 						"reason":  "budget exhausted",
@@ -177,7 +177,7 @@ func (s *RunService) orchestrate(ctx context.Context, cancel context.CancelFunc,
 					continue
 				}
 				s.spawnTask(runID, req, task, st)
-				handle.TaskStates[task.ID] = st.status
+				handle.SetTaskState(task.ID, st.status)
 			}
 
 			// 2. Check running tasks.
@@ -188,7 +188,7 @@ func (s *RunService) orchestrate(ctx context.Context, cancel context.CancelFunc,
 					continue
 				}
 				s.checkTask(runID, req, task, st, maxRetries, &accCost)
-				handle.TaskStates[task.ID] = st.status
+				handle.SetTaskState(task.ID, st.status)
 			}
 
 			// 3. Check if all done.

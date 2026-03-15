@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -57,6 +58,27 @@ type RunHandle struct {
 	Status     string
 	TaskStates map[string]string
 	Cancel     context.CancelFunc
+	mu         sync.Mutex
+}
+
+// SetTaskState safely updates a task's state.
+func (h *RunHandle) SetTaskState(taskID, state string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.TaskStates[taskID] = state
+}
+
+// CompletedCount returns the number of tasks in "completed" state.
+func (h *RunHandle) CompletedCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var n int
+	for _, st := range h.TaskStates {
+		if st == "completed" {
+			n++
+		}
+	}
+	return n
 }
 
 type RoutingDecision struct {
