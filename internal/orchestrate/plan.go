@@ -9,10 +9,14 @@ import (
 
 // Plan defines a declarative task graph for orchestrated execution.
 type Plan struct {
-	Name     string   `yaml:"name"`
-	Tasks    []Task   `yaml:"tasks"`
-	Settings Settings `yaml:"settings"`
+	Name       string   `yaml:"name"`
+	Tasks      []Task   `yaml:"tasks"`
+	Settings   Settings `yaml:"settings"`
+	RawContent string   `yaml:"-"` // original YAML, set by LoadPlan
 }
+
+// RawYAML returns the original YAML content as loaded from disk.
+func (p *Plan) RawYAML() string { return p.RawContent }
 
 // Task is a single unit of work in a plan.
 type Task struct {
@@ -67,6 +71,7 @@ func LoadPlan(path string) (*Plan, error) {
 	if err := yaml.Unmarshal(data, &plan); err != nil {
 		return nil, fmt.Errorf("parse plan YAML: %w", err)
 	}
+	plan.RawContent = string(data)
 
 	return &plan, nil
 }

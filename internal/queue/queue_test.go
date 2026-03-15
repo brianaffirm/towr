@@ -58,6 +58,10 @@ func (m *mockStore) EmitEvent(event store.Event) error                 { return 
 func (m *mockStore) QueryEvents(query store.EventQuery) ([]store.Event, error) { return nil, nil }
 func (m *mockStore) Init(dbPath string) error                          { return nil }
 func (m *mockStore) Close() error                                      { return nil }
+func (m *mockStore) CreateRun(run *store.Run) error                    { return nil }
+func (m *mockStore) UpdateRun(run *store.Run) error                    { return nil }
+func (m *mockStore) GetRun(id string) (*store.Run, error)              { return nil, nil }
+func (m *mockStore) ListRuns(repoRoot string) ([]*store.Run, error)    { return nil, nil }
 
 func TestQueueManager_Enqueue(t *testing.T) {
 	ms := newMockStore()

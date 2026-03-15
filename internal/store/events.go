@@ -36,6 +36,16 @@ const (
 	EventTaskBlocked    = "task.blocked"
 	EventTaskPromoted   = "task.promoted"
 	EventTaskCost       = "task.cost"
+
+	// Run lifecycle events
+	EventRunCreated   = "run.created"
+	EventRunStarted   = "run.started"
+	EventRunCompleted = "run.completed"
+	EventRunFailed    = "run.failed"
+	EventRunRecovered = "run.recovered"
+
+	// Routing decision (emitted at routing time, before dispatch)
+	EventTaskRouted = "task.routed"
 )
 
 // Event represents an immutable state-change record.
@@ -45,6 +55,7 @@ type Event struct {
 	Kind        string                 `json:"kind"`
 	WorkspaceID string                 `json:"workspace_id,omitempty"`
 	RepoRoot    string                 `json:"repo_root,omitempty"`
+	RunID       string                 `json:"run_id,omitempty"`
 	Runtime     string                 `json:"runtime,omitempty"`
 	Actor       string                 `json:"actor,omitempty"`
 	Data        map[string]interface{} `json:"data,omitempty"`
@@ -54,6 +65,7 @@ type Event struct {
 type EventQuery struct {
 	WorkspaceID string
 	RepoRoot    string
+	RunID       string
 	Kind        string
 	Since       *time.Time
 	Until       *time.Time

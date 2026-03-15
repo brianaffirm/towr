@@ -78,9 +78,10 @@ func (s *SQLiteStore) EmitEvent(event Event) error {
 	ts := event.Timestamp.UTC().Format(time.RFC3339Nano)
 
 	_, err = s.db.Exec(
-		`INSERT INTO events (id, timestamp, kind, workspace_id, repo_root, runtime, actor, data)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		event.ID, ts, event.Kind, event.WorkspaceID, event.RepoRoot, event.Runtime, event.Actor, string(dataJSON),
+		`INSERT INTO events (id, timestamp, kind, workspace_id, repo_root, run_id, runtime, actor, data)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		event.ID, ts, event.Kind, event.WorkspaceID, event.RepoRoot,
+		nullStr(event.RunID), event.Runtime, event.Actor, string(dataJSON),
 	)
 	if err != nil {
 		return fmt.Errorf("insert event: %w", err)
@@ -114,6 +115,10 @@ func (s *SQLiteStore) QueryEvents(query EventQuery) ([]Event, error) {
 		clauses = append(clauses, "repo_root = ?")
 		args = append(args, query.RepoRoot)
 	}
+	if query.RunID != "" {
+		clauses = append(clauses, "run_id = ?")
+		args = append(args, query.RunID)
+	}
 	if query.Kind != "" {
 		clauses = append(clauses, "kind = ?")
 		args = append(args, query.Kind)
@@ -127,7 +132,7 @@ func (s *SQLiteStore) QueryEvents(query EventQuery) ([]Event, error) {
 		args = append(args, query.Until.UTC().Format(time.RFC3339Nano))
 	}
 
-	q := "SELECT id, timestamp, kind, workspace_id, repo_root, runtime, actor, data FROM events"
+	q := "SELECT id, timestamp, kind, workspace_id, repo_root, run_id, runtime, actor, data FROM events"
 	if len(clauses) > 0 {
 		q += " WHERE " + strings.Join(clauses, " AND ")
 	}
@@ -147,15 +152,16 @@ func (s *SQLiteStore) QueryEvents(query EventQuery) ([]Event, error) {
 		var e Event
 		var ts string
 		var dataStr sql.NullString
-		var wsID, repoRoot, runtime, actor sql.NullString
+		var wsID, repoRoot, runID, runtime, actor sql.NullString
 
-		if err := rows.Scan(&e.ID, &ts, &e.Kind, &wsID, &repoRoot, &runtime, &actor, &dataStr); err != nil {
+		if err := rows.Scan(&e.ID, &ts, &e.Kind, &wsID, &repoRoot, &runID, &runtime, &actor, &dataStr); err != nil {
 			return nil, fmt.Errorf("scan event: %w", err)
 		}
 
 		e.Timestamp, _ = time.Parse(time.RFC3339Nano, ts)
 		e.WorkspaceID = wsID.String
 		e.RepoRoot = repoRoot.String
+		e.RunID = runID.String
 		e.Runtime = runtime.String
 		e.Actor = actor.String
 
@@ -549,6 +555,99 @@ func (s *SQLiteStore) LatestTaskEvent(repoRoot, workspaceID, dispatchID string) 
 	}
 
 	return &e, nil
+}
+
+// ---------- Runs ----------
+
+// CreateRun inserts a new run record.
+func (s *SQLiteStore) CreateRun(run *Run) error {
+	_, err := s.db.Exec(
+		`INSERT INTO runs (id, repo_root, plan_name, plan_content, status, owner_pid, full_auto, budget, created_at, started_at, finished_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		run.ID, run.RepoRoot, run.PlanName, run.PlanContent, run.Status,
+		run.OwnerPID, run.FullAuto, run.Budget,
+		run.CreatedAt, nullStr(run.StartedAt), nullStr(run.FinishedAt), run.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("create run: %w", err)
+	}
+	return nil
+}
+
+// UpdateRun updates mutable fields of an existing run.
+func (s *SQLiteStore) UpdateRun(run *Run) error {
+	_, err := s.db.Exec(
+		`UPDATE runs SET status=?, owner_pid=?, full_auto=?, budget=?,
+			started_at=?, finished_at=?, updated_at=?
+		 WHERE id=?`,
+		run.Status, run.OwnerPID, run.FullAuto, run.Budget,
+		nullStr(run.StartedAt), nullStr(run.FinishedAt), run.UpdatedAt,
+		run.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("update run: %w", err)
+	}
+	return nil
+}
+
+// GetRun retrieves a run by ID. Returns (nil, nil) if not found.
+func (s *SQLiteStore) GetRun(id string) (*Run, error) {
+	r := &Run{}
+	var startedAt, finishedAt sql.NullString
+	err := s.db.QueryRow(
+		`SELECT id, repo_root, plan_name, plan_content, status, owner_pid, full_auto, budget,
+			created_at, started_at, finished_at, updated_at
+		 FROM runs WHERE id = ?`, id,
+	).Scan(
+		&r.ID, &r.RepoRoot, &r.PlanName, &r.PlanContent, &r.Status,
+		&r.OwnerPID, &r.FullAuto, &r.Budget,
+		&r.CreatedAt, &startedAt, &finishedAt, &r.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get run: %w", err)
+	}
+	r.StartedAt = startedAt.String
+	r.FinishedAt = finishedAt.String
+	return r, nil
+}
+
+// ListRuns returns all runs for a repo, ordered by creation time descending.
+func (s *SQLiteStore) ListRuns(repoRoot string) ([]*Run, error) {
+	rows, err := s.db.Query(
+		`SELECT id, repo_root, plan_name, plan_content, status, owner_pid, full_auto, budget,
+			created_at, started_at, finished_at, updated_at
+		 FROM runs WHERE repo_root = ? ORDER BY created_at DESC`, repoRoot,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list runs: %w", err)
+	}
+	defer rows.Close()
+	var runs []*Run
+	for rows.Next() {
+		r := &Run{}
+		var startedAt, finishedAt sql.NullString
+		if err := rows.Scan(
+			&r.ID, &r.RepoRoot, &r.PlanName, &r.PlanContent, &r.Status,
+			&r.OwnerPID, &r.FullAuto, &r.Budget,
+			&r.CreatedAt, &startedAt, &finishedAt, &r.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan run: %w", err)
+		}
+		r.StartedAt = startedAt.String
+		r.FinishedAt = finishedAt.String
+		runs = append(runs, r)
+	}
+	return runs, rows.Err()
+}
+
+func nullStr(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
 }
 
 // ---------- Queue ----------

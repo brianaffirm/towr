@@ -58,6 +58,22 @@ type Resolution struct {
 	Response   string `json:"response,omitempty"`
 }
 
+// Run represents a plan execution — a single invocation of `towr run`.
+type Run struct {
+	ID          string  `json:"id"`
+	RepoRoot    string  `json:"repo_root"`
+	PlanName    string  `json:"plan_name"`
+	PlanContent string  `json:"plan_content"`
+	Status      string  `json:"status"`
+	OwnerPID    int     `json:"owner_pid,omitempty"`
+	FullAuto    bool    `json:"full_auto"`
+	Budget      float64 `json:"budget"`
+	CreatedAt   string  `json:"created_at"`
+	StartedAt   string  `json:"started_at,omitempty"`
+	FinishedAt  string  `json:"finished_at,omitempty"`
+	UpdatedAt   string  `json:"updated_at"`
+}
+
 // Store is the primary state API for towr.
 type Store interface {
 	// Workspace CRUD (materialized view of events)
@@ -69,6 +85,12 @@ type Store interface {
 	// Events (append-only)
 	EmitEvent(event Event) error
 	QueryEvents(query EventQuery) ([]Event, error)
+
+	// Run CRUD
+	CreateRun(run *Run) error
+	UpdateRun(run *Run) error
+	GetRun(id string) (*Run, error)
+	ListRuns(repoRoot string) ([]*Run, error)
 
 	// Queue (approval items)
 	EnqueueApproval(item QueueItem) error

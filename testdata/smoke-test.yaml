@@ -1,0 +1,9 @@
+name: smoke-test
+tasks:
+  - id: hello
+    prompt: "Create a file called hello.txt containing 'hello world', then git add and commit it."
+settings:
+  auto_approve: true
+  create_pr: false
+  max_retries: 1
+  poll_interval: "5s"

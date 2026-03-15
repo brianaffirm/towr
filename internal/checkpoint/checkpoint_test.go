@@ -42,6 +42,10 @@ func (m *mockStore) GetQueue(repoRoot string) ([]store.QueueItem, error)        
 func (m *mockStore) ResolveQueueItem(id string, res store.Resolution) error          { return nil }
 func (m *mockStore) Init(dbPath string) error                                        { return nil }
 func (m *mockStore) Close() error                                                    { return nil }
+func (m *mockStore) CreateRun(run *store.Run) error                                  { return nil }
+func (m *mockStore) UpdateRun(run *store.Run) error                                  { return nil }
+func (m *mockStore) GetRun(id string) (*store.Run, error)                            { return nil, nil }
+func (m *mockStore) ListRuns(repoRoot string) ([]*store.Run, error)                  { return nil, nil }
 
 func TestCreateImplicit(t *testing.T) {
 	// Stub git commands to avoid needing a real repo.

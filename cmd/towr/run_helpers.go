@@ -1,0 +1,134 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/brianaffirm/towr/internal/control"
+	"github.com/brianaffirm/towr/internal/cost"
+	"github.com/brianaffirm/towr/internal/mux"
+	"github.com/brianaffirm/towr/internal/orchestrate"
+	"github.com/brianaffirm/towr/internal/router"
+)
+
+// stdLog implements control.Logger with timestamped stdout output.
+type stdLog struct{}
+
+func (l *stdLog) Log(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	fmt.Printf("[%s] %s\n", time.Now().Format("15:04:05"), msg)
+}
+
+func buildRunRequest(repoRoot string, plan *orchestrate.Plan) control.RunRequest {
+	tasks := make([]control.TaskSpec, len(plan.Tasks))
+	for i, t := range plan.Tasks {
+		tasks[i] = control.TaskSpec{
+			ID: t.ID, Prompt: t.Prompt, DependsOn: t.DependsOn,
+			Agent: t.Agent, Model: t.Model,
+		}
+	}
+	return control.RunRequest{
+		RepoRoot:    repoRoot,
+		PlanName:    plan.Name,
+		PlanContent: plan.RawYAML(),
+		Tasks:       tasks,
+		Settings: control.SettingsSnapshot{
+			DefaultAgent:   plan.Settings.DefaultAgent,
+			DefaultModel:   plan.Settings.DefaultModel,
+			AutoApprove:    plan.Settings.AutoApprove,
+			MaxRetries:     plan.Settings.MaxRetries,
+			PollInterval:   parsePollInterval(plan),
+			CreatePR:       plan.Settings.CreatePR,
+			ReactToReviews: plan.Settings.ReactToReviews,
+			FullAuto:       plan.Settings.FullAuto,
+			Budget:         plan.Settings.Budget,
+			Web:            plan.Settings.Web,
+			WebAddr:        plan.Settings.WebAddr,
+			BaseBranch:     plan.Settings.BaseBranch,
+		},
+		Options: control.RunOptions{
+			Budget:   plan.Settings.Budget,
+			FullAuto: plan.Settings.FullAuto,
+		},
+	}
+}
+
+func formatDryRun(planName string, items []control.PreRunItem) string {
+	preItems := make([]cost.PreRunItem, len(items))
+	for i, item := range items {
+		preItems[i] = cost.PreRunItem{
+			TaskID: item.TaskID,
+			Decision: router.Decision{
+				Model:           item.Decision.Model,
+				Reason:          item.Decision.Reason,
+				Tier:            item.Decision.Tier,
+				CanEscalate:     item.Decision.CanEscalate,
+				RequireApproval: item.Decision.RequireApproval,
+			},
+			EstCost: cost.Calculate(item.Decision.Model, cost.DefaultEstimate()),
+		}
+	}
+	name := planName
+	if name == "" {
+		name = "plan"
+	}
+	return cost.FormatPreRun(name, preItems)
+}
+
+func startWebDashboard(addr string) {
+	if addr == "" {
+		addr = ":8090"
+	}
+	go func() {
+		towrBin, _ := os.Executable()
+		cmd := exec.Command(towrBin, "web", "--addr", addr)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		_ = cmd.Run()
+	}()
+	fmt.Printf("[%s] Web dashboard: http://127.0.0.1%s\n", time.Now().Format("15:04:05"), addr)
+}
+
+func startMuxStatusUpdater() {
+	if !mux.SessionExists(mux.DefaultSessionName) {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			_ = mux.UpdateStatusBar(mux.DefaultSessionName)
+		}
+	}()
+}
+
+func parsePollInterval(plan *orchestrate.Plan) time.Duration {
+	if plan.Settings.PollInterval != "" {
+		if d, err := time.ParseDuration(plan.Settings.PollInterval); err == nil {
+			return d
+		}
+	}
+	return 10 * time.Second
+}
+
+func runWatchReact(app *appContext, interval time.Duration) {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	fmt.Printf("[%s] Watching PRs for reviews and CI... (Ctrl-C to stop)\n", time.Now().Format("15:04:05"))
+	towrBin, _ := os.Executable()
+	cmd := exec.Command(towrBin, "watch", "--auto-approve", "--react", "--interval", interval.String())
+	cmd.Dir = app.repoRoot
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	go func() {
+		<-sigCh
+		if cmd.Process != nil {
+			_ = cmd.Process.Signal(syscall.SIGINT)
+		}
+	}()
+	_ = cmd.Run()
+}

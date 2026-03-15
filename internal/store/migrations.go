@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const currentSchemaVersion = 3
+const currentSchemaVersion = 4
 
 // schema_v1 creates the initial database schema.
 const schema_v1 = `
@@ -19,7 +19,23 @@ CREATE TABLE IF NOT EXISTS events (
     runtime TEXT,
     actor TEXT,
     data JSON,
+    run_id TEXT,
     created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS runs (
+    id          TEXT PRIMARY KEY,
+    repo_root   TEXT NOT NULL,
+    plan_name   TEXT NOT NULL,
+    plan_content TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    owner_pid   INTEGER,
+    full_auto   BOOLEAN DEFAULT 0,
+    budget      REAL DEFAULT 0,
+    created_at  TEXT NOT NULL,
+    started_at  TEXT,
+    finished_at TEXT,
+    updated_at  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -70,6 +86,9 @@ CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_workspaces_repo ON workspaces(repo_root);
 CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status);
 CREATE INDEX IF NOT EXISTS idx_queue_repo ON queue(repo_root);
+CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id);
+CREATE INDEX IF NOT EXISTS idx_runs_repo ON runs(repo_root);
+CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
 `
 
 // migrate runs all necessary migrations to bring the database up to date.
@@ -118,6 +137,37 @@ func migrate(db *sql.DB) error {
 			}
 		}
 		if err := setSchemaVersion(db, 3); err != nil {
+			return fmt.Errorf("set schema version: %w", err)
+		}
+	}
+
+	if ver < 4 {
+		_, err := db.Exec(`CREATE TABLE IF NOT EXISTS runs (
+			id          TEXT PRIMARY KEY,
+			repo_root   TEXT NOT NULL,
+			plan_name   TEXT NOT NULL,
+			plan_content TEXT NOT NULL,
+			status      TEXT NOT NULL,
+			owner_pid   INTEGER,
+			full_auto   BOOLEAN DEFAULT 0,
+			budget      REAL DEFAULT 0,
+			created_at  TEXT NOT NULL,
+			started_at  TEXT,
+			finished_at TEXT,
+			updated_at  TEXT NOT NULL
+		)`)
+		if err != nil {
+			return fmt.Errorf("apply schema v4 (create runs): %w", err)
+		}
+		if _, err := db.Exec(`ALTER TABLE events ADD COLUMN run_id TEXT`); err != nil {
+			if !isDuplicateColumnErr(err) {
+				return fmt.Errorf("apply schema v4 (add run_id to events): %w", err)
+			}
+		}
+		_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id)`)
+		_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_runs_repo ON runs(repo_root)`)
+		_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status)`)
+		if err := setSchemaVersion(db, 4); err != nil {
 			return fmt.Errorf("set schema version: %w", err)
 		}
 	}
