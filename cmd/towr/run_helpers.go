@@ -91,6 +91,7 @@ const (
 	ansiRed    = "\033[31m"
 )
 
+
 func formatPlanYAML(plan *orchestrate.Plan) string {
 	raw := plan.RawYAML()
 	if raw == "" {
@@ -123,6 +124,7 @@ func highlightYAMLLine(line string) string {
 		return line
 	}
 }
+
 
 func formatDryRun(planName string, items []control.PreRunItem) string {
 	preItems := make([]cost.PreRunItem, len(items))
