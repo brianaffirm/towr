@@ -149,15 +149,12 @@ func BuildKeybindingCommands(cfg MuxConfig) []TmuxCmd {
 		"bind", "q", "if-shell", guard, "kill-session", "display-panes",
 	}})
 
-	// Pane border format — shows pane title as a badge/pill on the top border.
-	// Active panes: white text on blue background (stands out).
-	// Inactive panes: gray text on dark background (recedes).
-	// NOTE: use spaces (not commas) in #[] styles to avoid conflict with #{?} conditional commas.
+	// Pane border format — shows pane title on top border with color.
+	// pane_title is set by SetPaneTitle to "name │ agent model │ +N/-N".
+	// Use tmux format conditionals to colorize the active pane differently.
 	borderFmt := " #[fg=#484f58]━━#[default] " +
-		"#{?#{pane_active}," +
-		"#[fg=#ffffff bg=#1f6feb bold] #{pane_title} #[default]," +
-		"#[fg=#8b949e bg=#161b22] #{pane_title} #[default]}" +
-		" #[fg=#484f58]━━#[default] "
+		"#{?#{pane_active},#[fg=#58a6ff bold],#[fg=#8b949e]}#{pane_title}" +
+		"#[default] #[fg=#484f58]━━#[default] "
 	cmds = append(cmds, TmuxCmd{Args: []string{
 		"set", "-t", session, "pane-border-format", borderFmt,
 	}})
