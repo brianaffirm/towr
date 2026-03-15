@@ -53,6 +53,7 @@ type Settings struct {
 	Routing        RoutingSettings `yaml:"routing"`
 	Budget         float64         `yaml:"budget"`
 	FullAuto       bool            `yaml:"full_auto"`       // skip all permission prompts on all agents
+	BaseBranch     string          `yaml:"base_branch,omitempty"` // base branch override for worktree creation
 }
 
 // LoadPlan reads and parses a YAML plan file from the given path.

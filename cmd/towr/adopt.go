@@ -9,6 +9,7 @@ import (
 
 	"github.com/brianaffirm/towr/internal/cli"
 	"github.com/brianaffirm/towr/internal/git"
+	"github.com/brianaffirm/towr/internal/orchestrate"
 	"github.com/brianaffirm/towr/internal/store"
 	"github.com/brianaffirm/towr/internal/workspace"
 	"github.com/spf13/cobra"
@@ -74,7 +75,7 @@ With no arguments, adopts the current directory's branch.`,
 				// Strip towr/ prefix if present.
 				name := branch
 				name = strings.TrimPrefix(name, "towr/")
-				wsID = slugify(name)
+				wsID = orchestrate.Slugify(name)
 			}
 
 			// Check not already tracked.
