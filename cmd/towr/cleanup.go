@@ -271,17 +271,43 @@ func cleanupDangerous(dryRun bool) error {
 					if err != nil {
 						continue
 					}
-					// Attempt proper git worktree remove for each, fall back to rm -rf.
+					repoRoot := filepath.Join(os.Getenv("HOME"), "w", repo.Name())
 					for _, wt := range wts {
 						wtPath := filepath.Join(repoWorktreeDir, wt.Name())
-						// Try to find repo root for proper deregistration.
-						repoRoot := filepath.Join(os.Getenv("HOME"), "w", repo.Name())
+						// Deregister from git if repo root exists, then force-remove.
 						if _, err := os.Stat(repoRoot); err == nil {
 							_ = exec.Command("git", "-C", repoRoot, "worktree", "remove", "--force", wtPath).Run()
 						}
 						_ = os.RemoveAll(wtPath)
 					}
 					_ = os.Remove(repoWorktreeDir)
+				}
+				return nil
+			},
+		},
+		{
+			label: fmt.Sprintf("delete towr/* git branches across all repos in ~/w/"),
+			fn: func() error {
+				wDir := filepath.Join(os.Getenv("HOME"), "w")
+				repos, err := os.ReadDir(wDir)
+				if err != nil {
+					return nil
+				}
+				for _, repo := range repos {
+					repoRoot := filepath.Join(wDir, repo.Name())
+					if _, err := os.Stat(filepath.Join(repoRoot, ".git")); err != nil {
+						continue
+					}
+					out, err := exec.Command("git", "-C", repoRoot, "branch", "--list", "towr/*").Output()
+					if err != nil || len(out) == 0 {
+						continue
+					}
+					for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+						branch := strings.TrimSpace(strings.TrimPrefix(line, "* "))
+						if branch != "" {
+							_ = exec.Command("git", "-C", repoRoot, "branch", "-D", branch).Run()
+						}
+					}
 				}
 				return nil
 			},
@@ -306,7 +332,8 @@ func cleanupDangerous(dryRun bool) error {
 					if err := s.Init(dbPath); err != nil {
 						continue
 					}
-					workspaces, _ := s.ListWorkspaces("", store.ListFilter{})
+					// Use AllRepos:true to list across all repo roots in this DB.
+					workspaces, _ := s.ListWorkspaces("", store.ListFilter{AllRepos: true})
 					for _, ws := range workspaces {
 						_ = s.DeleteWorkspace(ws.RepoRoot, ws.ID)
 					}
