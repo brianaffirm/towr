@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -55,6 +56,20 @@ func buildRunRequest(repoRoot string, plan *orchestrate.Plan) control.RunRequest
 			FullAuto: plan.Settings.FullAuto,
 		},
 	}
+}
+
+func formatPlanYAML(plan *orchestrate.Plan) string {
+	raw := plan.RawYAML()
+	if raw == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n")
+	for _, line := range strings.Split(strings.TrimRight(raw, "\n"), "\n") {
+		b.WriteString("  " + line + "\n")
+	}
+	b.WriteString("\n")
+	return b.String()
 }
 
 func formatDryRun(planName string, items []control.PreRunItem) string {

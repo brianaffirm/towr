@@ -107,10 +107,16 @@ all arguments are joined into a single task prompt.`,
 			req := buildRunRequest(app.repoRoot, plan)
 
 			if dryRun {
+				if isPlanFile {
+					fmt.Print(formatPlanYAML(plan))
+				}
 				fmt.Print(formatDryRun(plan.Name, svc.DryRun(req)))
 				return nil
 			}
 			if !quiet {
+				if isPlanFile {
+					fmt.Print(formatPlanYAML(plan))
+				}
 				fmt.Print(formatDryRun(plan.Name, svc.DryRun(req)))
 				if !plan.Settings.AutoApprove {
 					fmt.Print("\nProceed? [Y/n] ")
