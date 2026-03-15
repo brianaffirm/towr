@@ -124,23 +124,24 @@ func (t *TmuxBackend) CreatePane(id, cwd, command string) error {
 	// Check for active mux session.
 	if t.MuxSession != "" && mux.SessionExists(t.MuxSession) {
 		info, err := mux.AddPane(t.MuxSession, cwd)
-		if err != nil {
-			return fmt.Errorf("mux add pane: %w", err)
+		if err == nil {
+			t.mu.Lock()
+			t.muxPanes[id] = info.PaneID
+			t.mu.Unlock()
+			t.saveMuxPanes()
+
+			// If a command was specified, send it to the new pane.
+			if command != "" {
+				_ = t.tmuxRun("send-keys", "-t", info.PaneID, command, "C-m")
+			}
+
+			// Update the mux status bar.
+			_ = mux.UpdateStatusBar(t.MuxSession)
+
+			return nil
 		}
-		t.mu.Lock()
-		t.muxPanes[id] = info.PaneID
-		t.mu.Unlock()
-		t.saveMuxPanes()
-
-		// If a command was specified, send it to the new pane.
-		if command != "" {
-			_ = t.tmuxRun("send-keys", "-t", info.PaneID, command, "C-m")
-		}
-
-		// Update the mux status bar.
-		_ = mux.UpdateStatusBar(t.MuxSession)
-
-		return nil
+		// Mux pane split failed (e.g. terminal too small) — fall through to
+		// standalone session so the agent still runs visibly.
 	}
 
 	// Fallback: create separate tmux session (original behavior).

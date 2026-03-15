@@ -157,6 +157,18 @@ func (e *Executor) Run(ctx context.Context) error {
 	}
 }
 
+// activeCount returns the number of tasks currently spawning or running.
+// Must be called with e.mu held.
+func (e *Executor) activeCount() int {
+	count := 0
+	for _, s := range e.states {
+		if s == TaskSpawning || s == TaskRunning {
+			count++
+		}
+	}
+	return count
+}
+
 // tick performs one cycle: dispatch ready tasks, check running tasks, detect completion.
 func (e *Executor) tick(ctx context.Context) error {
 	e.mu.Lock()
@@ -167,6 +179,10 @@ func (e *Executor) tick(ctx context.Context) error {
 		task := &e.plan.Tasks[i]
 		if e.states[task.ID] != TaskPending {
 			continue
+		}
+		// Enforce max_parallel cap: stop spawning if at or above the limit.
+		if e.plan.Settings.MaxParallel > 0 && e.activeCount() >= e.plan.Settings.MaxParallel {
+			break
 		}
 		if e.allDepsCompleted(task) {
 			e.spawnAndDispatch(task)
@@ -252,8 +268,14 @@ func (e *Executor) spawnAndDispatch(task *Task) {
 		}
 	}
 
-	// Build enhanced prompt with dependency context and commit instruction.
-	prompt := task.Prompt
+	// Build enhanced prompt with subagent signal, dependency context, and commit instruction.
+	// The subagent header triggers the <SUBAGENT-STOP> clause in superpowers skills,
+	// preventing brainstorming/planning workflows from firing before implementation.
+	const subagentHeader = "You are a towr agent executing a specific task. " +
+		"Execute directly — do not invoke skill workflows, brainstorming, or planning " +
+		"sessions before starting. If something is ambiguous, make a reasonable choice " +
+		"and proceed.\n\n"
+	prompt := subagentHeader + task.Prompt
 	if depInfo != "" {
 		prompt += "\n\nContext from completed tasks:\n" + depInfo
 	}
