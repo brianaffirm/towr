@@ -11,6 +11,8 @@ import (
 	"github.com/brianaffirm/towr/internal/control"
 	"github.com/brianaffirm/towr/internal/cost"
 	"github.com/brianaffirm/towr/internal/dispatch"
+	"github.com/brianaffirm/towr/internal/mux"
+	"github.com/brianaffirm/towr/internal/terminal"
 	"github.com/brianaffirm/towr/internal/workspace"
 )
 
@@ -46,6 +48,14 @@ func (r *controlRuntime) SpawnWorkspace(taskID, prompt, agentType, repoRoot stri
 	}
 	if !r.app.term.IsHeadless() {
 		_ = r.app.term.CreatePane(ws.ID, ws.WorktreePath, "")
+		// Set pane title for border label in mux mode.
+		if tb, ok := r.app.term.(*terminal.TmuxBackend); ok {
+			if paneID := tb.MuxPaneID(ws.ID); paneID != "" {
+				agentLabel := runtimeName
+				title := fmt.Sprintf("%s │ %s │ +0/-0", taskID, agentLabel)
+				_ = mux.SetPaneTitle(paneID, title)
+			}
+		}
 	}
 	for _, dep := range depIDs {
 		branch := "towr/" + dep

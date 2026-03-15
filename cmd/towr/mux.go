@@ -62,7 +62,11 @@ If a mux session already exists, reattaches to it.`,
 			}
 
 			// Configure status bar.
-			statusCmds := mux.BuildStatusBarCommands(cfg, 2, 1, "master")
+			statusCmds := mux.BuildStatusBarCommands(cfg, mux.StatusBarData{
+				PaneCount:    2,
+				RunningCount: 0,
+				FocusName:    "master",
+			})
 			if err := mux.RunTmuxCmds(statusCmds); err != nil {
 				return fmt.Errorf("configure status bar: %w", err)
 			}

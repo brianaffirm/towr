@@ -119,6 +119,10 @@ func (m *mockStore) GetWorkspace(repoRoot, id string) (*store.Workspace, error) 
 	return nil, fmt.Errorf("not found")
 }
 
+func (m *mockStore) SaveWorkspace(w *store.Workspace) error {
+	return nil
+}
+
 func (m *mockStore) eventsByKind(kind string) []store.Event {
 	m.mu.Lock()
 	defer m.mu.Unlock()

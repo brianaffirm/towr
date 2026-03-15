@@ -225,7 +225,7 @@ func TestBuildStatusBarCommands(t *testing.T) {
 		SessionName: "towr-mux",
 	}
 
-	cmds := BuildStatusBarCommands(cfg, 3, 2, "agent-1")
+	cmds := BuildStatusBarCommands(cfg, StatusBarData{PaneCount: 3, RunningCount: 2, FocusName: "agent-1"})
 
 	if len(cmds) != 3 {
 		t.Fatalf("expected 3 status bar commands, got %d", len(cmds))
@@ -261,21 +261,18 @@ func TestCountMuxPanesNoSession(t *testing.T) {
 
 func TestBuildStatusBarCommandsContent(t *testing.T) {
 	cfg := MuxConfig{SessionName: "test-session"}
-	cmds := BuildStatusBarCommands(cfg, 5, 3, "worker-1")
+	cmds := BuildStatusBarCommands(cfg, StatusBarData{PaneCount: 5, RunningCount: 3, FocusName: "worker-1"})
 
 	// Verify left status contains expected values.
 	for _, c := range cmds {
 		for i, arg := range c.Args {
 			if arg == "status-left" && i+1 < len(c.Args) {
 				left := c.Args[i+1]
-				if !contains(left, "5 panes") {
-					t.Errorf("status-left should contain '5 panes', got %q", left)
+				if !contains(left, "TOWR") {
+					t.Errorf("status-left should contain 'TOWR', got %q", left)
 				}
-				if !contains(left, "3 running") {
-					t.Errorf("status-left should contain '3 running', got %q", left)
-				}
-				if !contains(left, "worker-1") {
-					t.Errorf("status-left should contain focus name 'worker-1', got %q", left)
+				if !contains(left, "3/5 agents") {
+					t.Errorf("status-left should contain '3/5 agents', got %q", left)
 				}
 			}
 		}

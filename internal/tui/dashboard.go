@@ -72,6 +72,11 @@ type DashboardModel struct {
 	repoStorePath string // repo-scoped store path (empty if started outside repo)
 	allStorePath  string // all-repos directory path
 	allRepos      bool   // current toggle state
+
+	// Mission control context (from tmux env).
+	planName   string
+	runCost    string
+	runElapsed string
 }
 
 // NewDashboardModel creates a new dashboard model.
@@ -103,10 +108,18 @@ type detailMsg struct {
 	diff  string
 }
 
+// contextMsg carries mux context read from tmux environment variables.
+type contextMsg struct {
+	planName string
+	cost     string
+	elapsed  string
+}
+
 // Init starts the periodic refresh.
 func (m DashboardModel) Init() tea.Cmd {
 	return tea.Batch(
 		refreshWorkspaces(m.repoRoot, m.activeStorePath(), m.allRepos),
+		readMuxContext(),
 		tickEvery(2*time.Second),
 	)
 }
@@ -124,6 +137,32 @@ func refreshWorkspaces(repoRoot, storePath string, allRepos bool) tea.Cmd {
 			return workspacesMsg(nil)
 		}
 		return workspacesMsg(rows)
+	}
+}
+
+// readMuxContext reads plan name, cost, and elapsed time from tmux session env vars.
+func readMuxContext() tea.Cmd {
+	return func() tea.Msg {
+		var plan, costStr, elapsed string
+		if out, err := exec.Command("tmux", "show-environment", "-t", "towr-mux", "TOWR_PLAN").CombinedOutput(); err == nil {
+			s := strings.TrimSpace(string(out))
+			if idx := strings.IndexByte(s, '='); idx >= 0 {
+				plan = s[idx+1:]
+			}
+		}
+		if out, err := exec.Command("tmux", "show-environment", "-t", "towr-mux", "TOWR_COST").CombinedOutput(); err == nil {
+			s := strings.TrimSpace(string(out))
+			if idx := strings.IndexByte(s, '='); idx >= 0 {
+				costStr = s[idx+1:]
+			}
+		}
+		if out, err := exec.Command("tmux", "show-environment", "-t", "towr-mux", "TOWR_ELAPSED").CombinedOutput(); err == nil {
+			s := strings.TrimSpace(string(out))
+			if idx := strings.IndexByte(s, '='); idx >= 0 {
+				elapsed = s[idx+1:]
+			}
+		}
+		return contextMsg{planName: plan, cost: costStr, elapsed: elapsed}
 	}
 }
 
@@ -429,6 +468,7 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m, tea.Batch(
 			refreshWorkspaces(m.repoRoot, m.activeStorePath(), m.allRepos),
+			readMuxContext(),
 			tickEvery(2*time.Second),
 		)
 
@@ -437,6 +477,12 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cursor >= len(m.workspaces) && len(m.workspaces) > 0 {
 			m.cursor = len(m.workspaces) - 1
 		}
+		return m, nil
+
+	case contextMsg:
+		m.planName = msg.planName
+		m.runCost = msg.cost
+		m.runElapsed = msg.elapsed
 		return m, nil
 
 	case detailMsg:
@@ -754,9 +800,9 @@ func (m DashboardModel) renderDashboard() string {
 	return m.renderWideDashboard()
 }
 
-// renderNarrowDashboard renders a compact single-column layout for the mux
-// control pane (~30-50 columns wide). Shows one workspace per row: status
-// icon, truncated ID, key metric.
+// renderNarrowDashboard renders a mission-control-style layout for the mux
+// control pane (~30-50 columns wide). Shows agent cards with status icons,
+// diff stats, progress bars, and a summary footer.
 func (m DashboardModel) renderNarrowDashboard() string {
 	var b strings.Builder
 	maxW := m.width
@@ -764,66 +810,197 @@ func (m DashboardModel) renderNarrowDashboard() string {
 		maxW = 40
 	}
 
-	// Compact header.
-	title := fmt.Sprintf(" towr %d ws", len(m.workspaces))
-	b.WriteString(headerStyle.Render(title))
+	// Header.
+	b.WriteString(headerStyle.Render("TOWR"))
 	b.WriteString("\n")
 
+	// Plan name box (if available).
+	if m.planName != "" {
+		planDisplay := truncate(m.planName, maxW-4)
+		borderW := len(planDisplay) + 2
+		if borderW > maxW-2 {
+			borderW = maxW - 2
+		}
+		border := strings.Repeat("─", borderW)
+		b.WriteString(dimStyle.Render("┌" + border + "┐"))
+		b.WriteString("\n")
+		b.WriteString(dimStyle.Render("│") + " " + planNameStyle.Render(planDisplay) + " " + dimStyle.Render("│"))
+		b.WriteString("\n")
+		b.WriteString(dimStyle.Render("└" + border + "┘"))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+
+	// Agent cards.
 	if len(m.workspaces) == 0 {
-		b.WriteString(dimStyle.Render(" (none)"))
+		b.WriteString(dimStyle.Render(" (no agents)"))
 		b.WriteString("\n")
 	} else {
 		for i, ws := range m.workspaces {
-			prefix := " "
+			// Status icon + name.
+			var icon string
+			switch {
+			case ws.Status == "BLOCKED" || ws.Status == "blocked":
+				icon = statusBlocked.Render("✗")
+			case ws.ExitCode != nil && *ws.ExitCode == 0:
+				icon = statusReady.Render("✓")
+			case ws.ExitCode != nil:
+				icon = statusBlocked.Render("✗")
+			default:
+				icon = statusRunning.Render("▶")
+			}
+
+			// Agent name (bold if selected).
+			name := ws.ID
+			if len(name) > maxW-4 {
+				name = name[:maxW-4]
+			}
 			if i == m.cursor {
-				prefix = ">"
+				b.WriteString(icon + " " + boldStyle.Render(name))
+			} else {
+				b.WriteString(icon + " " + name)
 			}
-
-			// Status icon.
-			icon := statusIcon(ws.Status, ws.Merged)
-
-			// Truncate ID to fit.
-			idMaxLen := maxW - 12 // icon(2) + prefix(1) + space(1) + status(~6) + padding
-			if idMaxLen < 6 {
-				idMaxLen = 6
-			}
-			id := truncate(ws.ID, idMaxLen)
-
-			// Compact status suffix.
-			suffix := narrowStatus(ws)
-
-			line := fmt.Sprintf("%s%s %s %s", prefix, icon, id, suffix)
-			if len(stripAnsi(line)) > maxW {
-				line = line[:maxW]
-			}
-			b.WriteString(line)
 			b.WriteString("\n")
+
+			// Agent runtime info.
+			agentInfo := ws.Agent
+			if agentInfo == "" {
+				agentInfo = "claude"
+			}
+			b.WriteString("  " + dimStyle.Render(agentInfo))
+			b.WriteString("\n")
+
+			// Diff stats + time.
+			colored := diffAdded.Render(fmt.Sprintf("+%d", ws.Added)) + "/" + diffRemoved.Render(fmt.Sprintf("-%d", ws.Removed))
+			timeStr := ws.Activity
+			if timeStr == "" || timeStr == "-" {
+				timeStr = ws.Age
+			}
+			if timeStr == "" || timeStr == "-" {
+				timeStr = ""
+			}
+			if timeStr != "" {
+				b.WriteString("  " + colored + " · " + dimStyle.Render(timeStr))
+			} else {
+				b.WriteString("  " + colored)
+			}
+			b.WriteString("\n")
+
+			// Progress bar.
+			pct := estimateProgress(ws)
+			bar := renderProgressBar(pct, 10)
+			b.WriteString("  " + bar + " " + dimStyle.Render(fmt.Sprintf("%d%%", pct)))
+			b.WriteString("\n")
+
+			// Blank line between cards (but not after last).
+			if i < len(m.workspaces)-1 {
+				b.WriteString("\n")
+			}
 		}
 	}
 
-	// Compact footer for selected workspace.
-	if len(m.workspaces) > 0 && m.cursor < len(m.workspaces) {
-		ws := m.workspaces[m.cursor]
-		sepW := maxW - 2
-		if sepW < 0 {
-			sepW = 0
-		}
-		b.WriteString(dimStyle.Render(strings.Repeat("─", sepW)))
-		b.WriteString("\n")
-		// Second line: diff + tree.
-		detail := fmt.Sprintf(" %s/%s", diffAdded.Render(fmt.Sprintf("+%d", ws.Added)), diffRemoved.Render(fmt.Sprintf("-%d", ws.Removed)))
-		if ws.Agent != "" {
-			detail += " " + dimStyle.Render(truncate(ws.Agent, 8))
-		}
-		b.WriteString(detail)
-		b.WriteString("\n")
+	// Summary footer.
+	b.WriteString("\n")
+	sepW := maxW - 2
+	if sepW < 1 {
+		sepW = 1
 	}
+	b.WriteString(dimStyle.Render(strings.Repeat("─", sepW)))
+	b.WriteString("\n")
 
-	// Compact help.
-	b.WriteString(footerStyle.Render(" j/k s l q"))
+	agentCount := len(m.workspaces)
+	costStr := ""
+	if m.runCost != "" {
+		costStr = " · " + statusRunning.Render("$"+m.runCost)
+	}
+	b.WriteString(fmt.Sprintf("%d agents%s", agentCount, costStr))
+	b.WriteString("\n")
+
+	// Blocked count + elapsed.
+	var blockedCount int
+	for _, ws := range m.workspaces {
+		if ws.Status == "BLOCKED" || ws.Status == "blocked" {
+			blockedCount++
+		}
+	}
+	blockedStr := fmt.Sprintf("%d blocked", blockedCount)
+	elapsedStr := ""
+	if m.runElapsed != "" {
+		elapsedStr = " · " + m.runElapsed
+	}
+	b.WriteString(dimStyle.Render(blockedStr + elapsedStr))
+	b.WriteString("\n\n")
+
+	// Footer.
+	b.WriteString(footerStyle.Render("[a]dd [j/k]nav [?]help"))
 	b.WriteString("\n")
 
 	return b.String()
+}
+
+// estimateProgress returns a 0-100 estimate based on workspace age, status, and diff stats.
+func estimateProgress(ws WorkspaceRow) int {
+	if ws.ExitCode != nil {
+		if *ws.ExitCode == 0 {
+			return 100
+		}
+		return 0
+	}
+
+	// If the workspace has committed changes (pushed or merged), it's likely done.
+	if ws.Pushed || ws.Merged {
+		return 95
+	}
+
+	// Estimate based on activity duration — typical task takes ~15 min.
+	age := ws.Age
+	if age == "" || age == "-" {
+		return 5
+	}
+	var minutes float64
+	if strings.HasSuffix(age, "s") {
+		fmt.Sscanf(age, "%f", &minutes)
+		minutes = minutes / 60
+	} else if strings.HasSuffix(age, "m") {
+		fmt.Sscanf(age, "%f", &minutes)
+	} else if strings.HasSuffix(age, "h") {
+		var h float64
+		fmt.Sscanf(age, "%f", &h)
+		minutes = h * 60
+	} else if strings.HasSuffix(age, "d") {
+		return 95
+	}
+
+	// Asymptotic curve: approaches 95% over ~20 minutes.
+	pct := int(95 * (1 - 1/(1+minutes/8)))
+
+	// Boost estimate if there are actual code changes — agent is making progress.
+	totalChanges := ws.Added + ws.Removed
+	if totalChanges > 0 {
+		// Having changes means at least 50% done; scale up with more changes.
+		changeBoost := 50 + min(totalChanges, 45)
+		if changeBoost > pct {
+			pct = changeBoost
+		}
+	}
+
+	if pct < 5 {
+		pct = 5
+	}
+	if pct > 95 {
+		pct = 95
+	}
+	return pct
+}
+
+// renderProgressBar renders a text progress bar with filled and empty segments.
+func renderProgressBar(pct, width int) string {
+	filled := pct * width / 100
+	if filled > width {
+		filled = width
+	}
+	empty := width - filled
+	return statusReady.Render(strings.Repeat("█", filled)) + dimStyle.Render(strings.Repeat("░", empty))
 }
 
 // statusIcon returns a compact status icon for narrow mode.

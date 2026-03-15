@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,12 +16,34 @@ import (
 	"github.com/brianaffirm/towr/internal/router"
 )
 
-// stdLog implements control.Logger with timestamped stdout output.
+// stdLog implements control.Logger with colored timestamped stdout output.
 type stdLog struct{}
 
 func (l *stdLog) Log(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
-	fmt.Printf("[%s] %s\n", time.Now().Format("15:04:05"), msg)
+	ts := ansiDim + time.Now().Format("15:04:05") + ansiReset
+	colored := colorizeLogMsg(msg)
+	fmt.Printf(" %s  %s\n", ts, colored)
+}
+
+// colorizeLogMsg applies color based on log message content.
+func colorizeLogMsg(msg string) string {
+	switch {
+	case strings.HasPrefix(msg, "completed"):
+		return ansiGreen + "✓ " + msg + ansiReset
+	case strings.HasPrefix(msg, "dispatched"):
+		return ansiCyan + "▸ " + msg + ansiReset
+	case strings.HasPrefix(msg, "escalating"):
+		return ansiYellow + "↑ " + msg + ansiReset
+	case strings.Contains(msg, "failed") || strings.Contains(msg, "error"):
+		return ansiRed + "✗ " + msg + ansiReset
+	case strings.HasPrefix(msg, "reconciled"):
+		return ansiDim + "○ " + msg + ansiReset
+	case strings.HasPrefix(msg, "budget"):
+		return ansiYellow + "$ " + msg + ansiReset
+	default:
+		return msg
+	}
 }
 
 func buildRunRequest(repoRoot string, plan *orchestrate.Plan) control.RunRequest {
@@ -54,6 +77,50 @@ func buildRunRequest(repoRoot string, plan *orchestrate.Plan) control.RunRequest
 			Budget:   plan.Settings.Budget,
 			FullAuto: plan.Settings.FullAuto,
 		},
+	}
+}
+
+// ANSI color constants for run output.
+const (
+	ansiReset  = "\033[0m"
+	ansiBold   = "\033[1m"
+	ansiDim    = "\033[2m"
+	ansiGreen  = "\033[32m"
+	ansiYellow = "\033[33m"
+	ansiCyan   = "\033[36m"
+	ansiRed    = "\033[31m"
+)
+
+func formatPlanYAML(plan *orchestrate.Plan) string {
+	raw := plan.RawYAML()
+	if raw == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n")
+	for _, line := range strings.Split(strings.TrimRight(raw, "\n"), "\n") {
+		colored := highlightYAMLLine(line)
+		b.WriteString("  " + colored + "\n")
+	}
+	b.WriteString("\n")
+	return b.String()
+}
+
+// highlightYAMLLine applies simple YAML syntax highlighting to a line.
+func highlightYAMLLine(line string) string {
+	trimmed := strings.TrimSpace(line)
+	indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+
+	switch {
+	case trimmed == "" || strings.HasPrefix(trimmed, "#"):
+		return indent + ansiDim + trimmed + ansiReset
+	case strings.HasPrefix(trimmed, "- id:"):
+		return indent + ansiCyan + ansiBold + trimmed + ansiReset
+	case strings.Contains(trimmed, ":") && !strings.HasPrefix(trimmed, "-"):
+		parts := strings.SplitN(trimmed, ":", 2)
+		return indent + ansiCyan + parts[0] + ansiReset + ":" + parts[1]
+	default:
+		return line
 	}
 }
 
@@ -93,17 +160,64 @@ func startWebDashboard(addr string) {
 	fmt.Printf("[%s] Web dashboard: http://127.0.0.1%s\n", time.Now().Format("15:04:05"), addr)
 }
 
-func startMuxStatusUpdater() {
-	if !mux.SessionExists(mux.DefaultSessionName) {
-		return
+// startMuxStatusUpdater launches a background goroutine that updates the tmux
+// status bar every 5 seconds. Returns a stop function that cancels the updater.
+func startMuxStatusUpdater(planName string, handle *control.RunHandle, rt *controlRuntime, tasks []orchestrate.Task) func() {
+	session := mux.DefaultSessionName
+	if !mux.SessionExists(session) {
+		return func() {}
 	}
+	// Set plan name immediately.
+	if planName != "" {
+		_ = mux.SetSessionEnv(session, "TOWR_PLAN", planName)
+	}
+	done := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			_ = mux.UpdateStatusBar(mux.DefaultSessionName)
+		startTime := time.Now()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+			}
+			elapsed := int(time.Since(startTime).Minutes())
+			_ = mux.SetSessionEnv(session, "TOWR_ELAPSED", fmt.Sprintf("%d", elapsed))
+			if handle != nil {
+				_ = mux.SetSessionEnv(session, "TOWR_COMPLETED", fmt.Sprintf("%d", handle.CompletedCount()))
+			}
+			// Compute aggregate cost across all tasks.
+			if rt != nil {
+				var totalCost float64
+				for _, t := range tasks {
+					model := t.Model
+					if model == "" {
+						model = "sonnet"
+					}
+					_, _, _, actual, _ := rt.ComputeCost(t.ID, model)
+					totalCost += actual
+				}
+				if totalCost > 0 {
+					_ = mux.SetSessionEnv(session, "TOWR_COST", fmt.Sprintf("%.2f", totalCost))
+				}
+			}
+			_ = mux.UpdateStatusBar(session)
 		}
 	}()
+	return func() { close(done) }
+}
+
+func cleanupMuxEnv() {
+	session := mux.DefaultSessionName
+	if !mux.SessionExists(session) {
+		return
+	}
+	_ = mux.SetSessionEnv(session, "TOWR_PLAN", "")
+	_ = mux.SetSessionEnv(session, "TOWR_COST", "")
+	_ = mux.SetSessionEnv(session, "TOWR_ELAPSED", "")
+	_ = mux.SetSessionEnv(session, "TOWR_COMPLETED", "")
+	_ = mux.UpdateStatusBar(session)
 }
 
 func parsePollInterval(plan *orchestrate.Plan) time.Duration {

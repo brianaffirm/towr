@@ -371,6 +371,13 @@ func (t *TmuxBackend) IsHeadless() bool {
 	return false
 }
 
+// MuxPaneID returns the tmux pane ID for a workspace in mux mode, or "" if not in mux.
+func (t *TmuxBackend) MuxPaneID(id string) string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.muxPanes[id]
+}
+
 // SendKeys sends raw keystrokes to the workspace's tmux pane.
 func (t *TmuxBackend) SendKeys(id, keys string) error {
 	target := t.targetFor(id)

@@ -22,26 +22,59 @@ type PostRunItem struct {
 	OpusCost   float64
 }
 
+// ANSI color helpers.
+const (
+	cReset  = "\033[0m"
+	cBold   = "\033[1m"
+	cDim    = "\033[2m"
+	cGreen  = "\033[32m"
+	cYellow = "\033[33m"
+	cBlue   = "\033[34m"
+	cCyan   = "\033[36m"
+	cWhite  = "\033[37m"
+)
+
+// modelColor returns an ANSI color for a model name.
+func modelColor(model string) string {
+	switch {
+	case strings.Contains(model, "opus"):
+		return "\033[35m" // magenta
+	case strings.Contains(model, "sonnet"):
+		return cBlue
+	case strings.Contains(model, "haiku"):
+		return cCyan
+	case strings.Contains(model, "codex"):
+		return cYellow
+	default:
+		return cWhite
+	}
+}
+
 func FormatPreRun(planName string, items []PreRunItem) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "\nPlan: %s (%d tasks)\n\n", planName, len(items))
-	fmt.Fprintf(&b, "  %-20s %-8s %-28s %s\n", "Task", "Model", "Reason", "Est. Cost")
-	fmt.Fprintf(&b, "  %s\n", strings.Repeat("─", 70))
+	fmt.Fprintf(&b, "\n%s%s▸ Plan: %s%s (%d tasks)\n\n", cBold, cCyan, planName, cReset, len(items))
+	fmt.Fprintf(&b, "  %s%-20s %-10s %-24s %s%s\n", cDim, "Task", "Model", "Reason", "Est. Cost", cReset)
+	fmt.Fprintf(&b, "  %s%s%s\n", cDim, strings.Repeat("─", 66), cReset)
 
 	var total, opusTotal float64
 	for _, item := range items {
 		opusEst := Calculate("opus", DefaultEstimate())
-		fmt.Fprintf(&b, "  %-20s %-8s %-28s ~$%.2f\n", item.TaskID, item.Decision.Model, item.Decision.Reason, item.EstCost)
+		mc := modelColor(item.Decision.Model)
+		fmt.Fprintf(&b, "  %s%-20s%s %s%-10s%s %s%-24s%s %s~$%.2f%s\n",
+			cBold, item.TaskID, cReset,
+			mc, item.Decision.Model, cReset,
+			cDim, item.Decision.Reason, cReset,
+			cYellow, item.EstCost, cReset)
 		total += item.EstCost
 		opusTotal += opusEst
 	}
 
 	fmt.Fprintf(&b, "\n")
-	fmt.Fprintf(&b, "  Estimated:  ~$%.2f\n", total)
-	fmt.Fprintf(&b, "  All-opus:   ~$%.2f\n", opusTotal)
+	fmt.Fprintf(&b, "  %sEstimated:%s  %s~$%.2f%s\n", cDim, cReset, cYellow+cBold, total, cReset)
+	fmt.Fprintf(&b, "  %sAll-opus:%s   %s~$%.2f%s\n", cDim, cReset, cDim, opusTotal, cReset)
 	if opusTotal > 0 {
 		pct := (opusTotal - total) / opusTotal * 100
-		fmt.Fprintf(&b, "  Savings:    ~%.0f%%\n", pct)
+		fmt.Fprintf(&b, "  %sSavings:%s    %s~%.0f%%%s\n", cDim, cReset, cGreen+cBold, pct, cReset)
 	}
 	return b.String()
 }

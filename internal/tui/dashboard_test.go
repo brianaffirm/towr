@@ -359,8 +359,138 @@ func TestRenderNarrowDashboardEmpty(t *testing.T) {
 		height:   20,
 	}
 	output := m.View()
-	if !containsStr(output, "(none)") {
-		t.Error("narrow empty dashboard should show '(none)'")
+	if !containsStr(output, "(no agents)") {
+		t.Error("narrow empty dashboard should show '(no agents)'")
+	}
+}
+
+func TestEstimateProgress(t *testing.T) {
+	// Completed workspace (exit 0) -> 100%.
+	exitZero := 0
+	ws := WorkspaceRow{ExitCode: &exitZero, Age: "5m"}
+	if got := estimateProgress(ws); got != 100 {
+		t.Errorf("estimateProgress(exit 0) = %d, want 100", got)
+	}
+
+	// Failed workspace (exit 1) -> 0%.
+	exitOne := 1
+	ws2 := WorkspaceRow{ExitCode: &exitOne, Age: "5m"}
+	if got := estimateProgress(ws2); got != 0 {
+		t.Errorf("estimateProgress(exit 1) = %d, want 0", got)
+	}
+
+	// No age -> 5%.
+	ws3 := WorkspaceRow{Age: ""}
+	if got := estimateProgress(ws3); got != 5 {
+		t.Errorf("estimateProgress(no age) = %d, want 5", got)
+	}
+
+	// 10m age -> should be between 5 and 95.
+	ws4 := WorkspaceRow{Age: "10m"}
+	if got := estimateProgress(ws4); got < 5 || got > 95 {
+		t.Errorf("estimateProgress(10m) = %d, want between 5 and 95", got)
+	}
+
+	// Day-old -> 95%.
+	ws5 := WorkspaceRow{Age: "2d"}
+	if got := estimateProgress(ws5); got != 95 {
+		t.Errorf("estimateProgress(2d) = %d, want 95", got)
+	}
+
+	// With code changes -> boosted to at least 50.
+	ws6 := WorkspaceRow{Age: "1m", Added: 20, Removed: 5}
+	if got := estimateProgress(ws6); got < 50 {
+		t.Errorf("estimateProgress(1m, +20/-5) = %d, want >= 50", got)
+	}
+
+	// Pushed -> 95%.
+	ws7 := WorkspaceRow{Age: "2m", Pushed: true}
+	if got := estimateProgress(ws7); got != 95 {
+		t.Errorf("estimateProgress(pushed) = %d, want 95", got)
+	}
+}
+
+func TestRenderProgressBar(t *testing.T) {
+	// 50% with width 10 -> 5 filled, 5 empty (10 runes total).
+	bar := stripAnsi(renderProgressBar(50, 10))
+	runeCount := len([]rune(bar))
+	if runeCount != 10 {
+		t.Errorf("progress bar rune count = %d, want 10", runeCount)
+	}
+
+	// 100% -> all filled.
+	bar100 := stripAnsi(renderProgressBar(100, 10))
+	runeCount100 := len([]rune(bar100))
+	if runeCount100 != 10 {
+		t.Errorf("progress bar 100%% rune count = %d, want 10", runeCount100)
+	}
+
+	// 0% -> all empty.
+	bar0 := stripAnsi(renderProgressBar(0, 10))
+	runeCount0 := len([]rune(bar0))
+	if runeCount0 != 10 {
+		t.Errorf("progress bar 0%% rune count = %d, want 10", runeCount0)
+	}
+}
+
+func TestContextMsgUpdate(t *testing.T) {
+	m := DashboardModel{}
+	updated, _ := m.Update(contextMsg{planName: "my-plan", cost: "1.50", elapsed: "12m"})
+	m = updated.(DashboardModel)
+	if m.planName != "my-plan" {
+		t.Errorf("planName = %q, want 'my-plan'", m.planName)
+	}
+	if m.runCost != "1.50" {
+		t.Errorf("runCost = %q, want '1.50'", m.runCost)
+	}
+	if m.runElapsed != "12m" {
+		t.Errorf("runElapsed = %q, want '12m'", m.runElapsed)
+	}
+}
+
+func TestNarrowDashboardWithPlanName(t *testing.T) {
+	m := DashboardModel{
+		repoRoot: "/tmp/myrepo",
+		workspaces: []WorkspaceRow{
+			{ID: "auth", Status: "active", Branch: "towr/auth", Added: 10, Removed: 3, Agent: "claude", Age: "5m"},
+		},
+		cursor:   0,
+		view:     viewDashboard,
+		width:    40,
+		height:   30,
+		planName: "refactor-auth",
+	}
+	output := m.View()
+	if !containsStr(output, "refactor-auth") {
+		t.Error("narrow dashboard with plan should contain plan name")
+	}
+	if !containsStr(output, "TOWR") {
+		t.Error("narrow dashboard should contain TOWR header")
+	}
+}
+
+func TestNarrowDashboardProgressAndStats(t *testing.T) {
+	m := DashboardModel{
+		repoRoot: "/tmp/myrepo",
+		workspaces: []WorkspaceRow{
+			{ID: "auth", Status: "active", Branch: "towr/auth", Added: 176, Removed: 38, Agent: "claude", Age: "16m"},
+			{ID: "api-tests", Status: "blocked", Branch: "towr/api", Added: 127, Removed: 12, Agent: "codex", Age: "12m"},
+		},
+		cursor:     0,
+		view:       viewDashboard,
+		width:      40,
+		height:     30,
+		runCost:    "1.65",
+		runElapsed: "18m",
+	}
+	output := m.View()
+	// Should show agent count.
+	if !containsStr(output, "2 agents") {
+		t.Error("narrow dashboard should show agent count")
+	}
+	// Should show blocked count.
+	if !containsStr(output, "1 blocked") {
+		t.Error("narrow dashboard should show blocked count")
 	}
 }
 

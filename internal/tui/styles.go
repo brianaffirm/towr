@@ -32,6 +32,9 @@ var (
 	diffPanelStyle  = lipgloss.NewStyle().Padding(0, 1)
 	activeFileStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
 	normalFileStyle = lipgloss.NewStyle()
+
+	// Mission control styles.
+	planNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true) // cyan bold
 )
 
 // colorStatus returns styled status text.

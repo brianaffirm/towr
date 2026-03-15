@@ -107,10 +107,16 @@ all arguments are joined into a single task prompt.`,
 			req := buildRunRequest(app.repoRoot, plan)
 
 			if dryRun {
+				if isPlanFile {
+					fmt.Print(formatPlanYAML(plan))
+				}
 				fmt.Print(formatDryRun(plan.Name, svc.DryRun(req)))
 				return nil
 			}
 			if !quiet {
+				if isPlanFile {
+					fmt.Print(formatPlanYAML(plan))
+				}
 				fmt.Print(formatDryRun(plan.Name, svc.DryRun(req)))
 				if !plan.Settings.AutoApprove {
 					fmt.Print("\nProceed? [Y/n] ")
@@ -127,7 +133,6 @@ all arguments are joined into a single task prompt.`,
 			if plan.Settings.Web {
 				startWebDashboard(plan.Settings.WebAddr)
 			}
-			startMuxStatusUpdater()
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -139,12 +144,15 @@ all arguments are joined into a single task prompt.`,
 			}()
 
 			handle, err := svc.Start(ctx, req)
+			stopUpdater := startMuxStatusUpdater(plan.Name, handle, &controlRuntime{app: app, baseBranch: plan.Settings.BaseBranch}, plan.Tasks)
 			if handle != nil {
 				for handle.Status == control.RunRunning {
 					time.Sleep(100 * time.Millisecond)
 				}
 				fmt.Printf("\nRun %s: %s\n", handle.ID, handle.Status)
 			}
+			stopUpdater()
+			cleanupMuxEnv()
 			if err == nil && plan.Settings.ReactToReviews {
 				runWatchReact(app, parsePollInterval(plan))
 			}

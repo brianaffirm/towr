@@ -14,6 +14,7 @@ type ControlStore interface {
 	EmitEvent(event store.Event) error
 	QueryEvents(query store.EventQuery) ([]store.Event, error)
 	GetWorkspace(repoRoot, id string) (*store.Workspace, error)
+	SaveWorkspace(w *store.Workspace) error
 }
 
 type Router interface {
