@@ -47,7 +47,9 @@ func (r *controlRuntime) SpawnWorkspace(taskID, prompt, agentType, repoRoot stri
 		return err
 	}
 	if !r.app.term.IsHeadless() {
-		_ = r.app.term.CreatePane(ws.ID, ws.WorktreePath, "")
+		if err := r.app.term.CreatePane(ws.ID, ws.WorktreePath, ""); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠ %s: pane creation failed — %v (running as standalone session)\n", taskID, err)
+		}
 		// Set pane title for border label in mux mode.
 		if tb, ok := r.app.term.(*terminal.TmuxBackend); ok {
 			if paneID := tb.MuxPaneID(ws.ID); paneID != "" {
