@@ -2,6 +2,7 @@
 /towr
 /amux
 /dist/
+/_temp/
 
 # OS files
 .DS_Store
