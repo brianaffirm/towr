@@ -12,6 +12,7 @@ import (
 	"github.com/brianaffirm/towr/internal/cli"
 	"github.com/brianaffirm/towr/internal/config"
 	gitpkg "github.com/brianaffirm/towr/internal/git"
+	"github.com/brianaffirm/towr/internal/orchestrate"
 	"github.com/brianaffirm/towr/internal/store"
 	"github.com/brianaffirm/towr/internal/terminal"
 	"github.com/brianaffirm/towr/internal/workspace"
@@ -39,6 +40,9 @@ func newSpawnCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Com
 		Long:    "Create a git worktree workspace, optionally launch an agent.\nWith no arguments, auto-generates a workspace ID.",
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Fprintln(cmd.ErrOrStderr(), "⚠ towr spawn is deprecated — use: towr run \"<prompt>\"")
+			fmt.Fprintln(cmd.ErrOrStderr(), "  spawn still works but will be removed in a future release.")
+
 			var task string
 			if len(args) > 0 {
 				task = args[0]
@@ -48,7 +52,7 @@ func newSpawnCmd(initApp func() (*appContext, error), jsonFlag *bool) *cobra.Com
 			wsID := idFlag
 			if wsID == "" {
 				if task != "" {
-					wsID = slugify(task)
+					wsID = orchestrate.Slugify(task)
 				} else {
 					wsID = nextAutoID()
 					task = wsID
@@ -313,39 +317,6 @@ func nextAutoID() string {
 		}
 	}
 	return fmt.Sprintf("ws-%04d", maxN+1)
-}
-
-// slugify converts a task description into a short workspace ID.
-func slugify(s string) string {
-	var result []byte
-	prevDash := false
-	for _, c := range []byte(s) {
-		switch {
-		case c >= 'a' && c <= 'z', c >= '0' && c <= '9':
-			result = append(result, c)
-			prevDash = false
-		case c >= 'A' && c <= 'Z':
-			result = append(result, c+32) // lowercase
-			prevDash = false
-		case c == ' ' || c == '-' || c == '_' || c == '/':
-			if !prevDash && len(result) > 0 {
-				result = append(result, '-')
-				prevDash = true
-			}
-		}
-	}
-	// Trim trailing dash.
-	if len(result) > 0 && result[len(result)-1] == '-' {
-		result = result[:len(result)-1]
-	}
-	// Limit length.
-	if len(result) > 30 {
-		result = result[:30]
-	}
-	if len(result) == 0 {
-		return "workspace"
-	}
-	return string(result)
 }
 
 // parseEnvFlags parses --env KEY=VAL flags into a map.
